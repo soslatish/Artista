@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Artista",
+    "slug": "artista",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3D0E0E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.artista.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#3D0E0E"
+      },
+      "package": "com.artista.app"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share images."
+        }
+      ]
+    ],
+    "scheme": "artista",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
