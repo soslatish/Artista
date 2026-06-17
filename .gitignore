@@ -32,6 +32,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude
+.claude/
+
 # Expo
 .expo-shared/
 web-build/

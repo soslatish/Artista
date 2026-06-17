@@ -31,11 +31,13 @@ export default function UserProfileScreen() {
 
   useEffect(() => {
     Promise.all([
-      api.get(`/users/${id}`).then((r) => setProfile(r.data)),
-      api.get(`/reviews/user/${id}`).then((r) => setReviews(r.data)),
+      api.get(`/users/${id}`),
+      api.get(`/reviews/user/${id}`),
     ])
-      .then(async ([userResp]) => {
+      .then(async ([userResp, reviewsResp]) => {
         const u = userResp.data as User;
+        setProfile(u);
+        setReviews(reviewsResp.data);
         if (u.role === 'artist') {
           const { data } = await api.get('/services/', { params: {} });
           setServices(data.filter((s: Service) => s.user_id === u.id));
