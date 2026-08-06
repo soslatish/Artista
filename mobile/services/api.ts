@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import * as Storage from './storage';
 
 // Change this to your backend IP when testing on a physical device
 export const API_BASE_URL = 'http://192.168.1.100:8000';
@@ -10,7 +10,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('access_token');
+  const token = await Storage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
