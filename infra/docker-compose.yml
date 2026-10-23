@@ -1,0 +1,48 @@
+# Artista: API + Postgres + nginx (TLS терминирует nginx или балансировщик хостинга).
+# Запуск:  cp .env.example .env  &&  docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: artista
+      POSTGRES_USER: artista
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_INITDB_ARGS: "--locale=C.UTF-8 --encoding=UTF8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artista -d artista"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-dev}
+      DATABASE_URL: postgres://artista:${POSTGRES_PASSWORD}@db:5432/artista?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET (не короче 32 символов)}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-stub}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes:
+      - uploads:/data/uploads
+    expose:
+      - "8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  pgdata:
+  uploads:
