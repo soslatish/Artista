@@ -70,8 +70,8 @@ cd mobile && npm run typecheck && npm run lint && npm test -- --coverage   # 78 
 2. **Android (Google Play, RuStore):** `eas build -p android --profile production` → `.aab`.
    ID пакета оставлен прежним — `com.aleksandr.artista`, поэтому версия выйдет обновлением.
    Для Google Play загрузите AAB в существующее приложение (Play App Signing переподпишет его вашим ключом;
-   если ключ загрузки утерян — сбросьте его в консоли). Для RuStore нужен APK, подписанный тем же ключом,
-   что и опубликованная версия: `eas build -p android --profile preview` даёт APK; ключ можно загрузить в `eas credentials`.
+   если ключ загрузки утерян — сбросьте его в консоли). Для RuStore сборка должна быть подписана тем же ключом,
+   что и опубликованная версия: загрузите его в `eas credentials`; APK собирается профилем `preview`.
 3. **iOS (App Store):** нужен Apple Developer Program ($99/год). `eas build -p ios --profile production`,
    затем `eas submit -p ios`. Bundle ID — `com.aleksandr.artista`.
 4. Перед публикацией: укажите боевой `EXPO_PUBLIC_API_URL` в `eas.json`, обновите `version` /
