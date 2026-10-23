@@ -1,0 +1,22 @@
+# Художник подтверждает и отправляет оплаченный заказ (запускать после buyer-purchase.yaml)
+appId: com.aleksandr.artista
+---
+- launchApp:
+    clearState: true
+- tapOn: "Войти"
+- tapOn: "E-mail"
+- inputText: "marina@demo.artista"
+- tapOn: "Пароль"
+- inputText: "demo12345"
+- tapOn:
+    text: "Войти"
+    index: 1
+- tapOn: "Профиль"
+- tapOn: "Продажи"
+- tapOn: "Белые ночи на Неве.*"
+- tapOn: "Подтвердить заказ"
+- tapOn: "Трек-номер отправления"
+- inputText: "1234567890"
+- hideKeyboard
+- tapOn: "Отметить отправку"
+- assertVisible: "В пути"

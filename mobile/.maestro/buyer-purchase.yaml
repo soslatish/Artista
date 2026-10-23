@@ -1,0 +1,28 @@
+# Покупка работы с тестовой оплатой. Нужны демо-данные: backend/scripts/seed_demo.py
+# Запуск на эмуляторе/устройстве с development build:  maestro test .maestro/
+appId: com.aleksandr.artista
+---
+- launchApp:
+    clearState: true
+- tapOn: "Войти"
+- tapOn: "E-mail"
+- inputText: "buyer@demo.artista"
+- tapOn: "Пароль"
+- inputText: "demo12345"
+- tapOn:
+    text: "Войти"
+    index: 1
+- assertVisible: "Новое"
+- tapOn: "Белые ночи на Неве"
+- assertVisible: "Купить"
+- tapOn: "Купить"
+- tapOn: "Улица, дом, квартира"
+- inputText: "ул. Покровка, д. 12, кв. 3"
+- tapOn: "Телефон"
+- inputText: "+79001234567"
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Оплатить.*"
+- tapOn: "Оплатить.*"
+- tapOn: "Оплатить (тест)"
+- assertVisible: "Оплачен, ждёт подтверждения"
