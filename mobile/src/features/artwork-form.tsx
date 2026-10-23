@@ -72,7 +72,7 @@ export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
     const { errors: errs, payload } = validateArtworkForm(form, publish || !!isPublished);
     setErrors(errs);
     if (!payload) {
-      setError('Проверьте отмеченные поля');
+      setError(`Проверьте поля: ${Object.values(errs).join('; ').toLowerCase()}`);
       return;
     }
     setError('');

@@ -34,7 +34,7 @@ export function T({ variant = 'body', color, center, style, ...rest }: TProps) {
 
 // ---------- кнопки ----------
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light' | 'outlineLight';
 
 interface ButtonProps {
   title: string;
@@ -77,6 +77,7 @@ const buttonVariants: Record<ButtonVariant, { box: ViewStyle; text: TextStyle & 
   ghost: { box: { backgroundColor: 'transparent' }, text: { color: colors.bordeaux } },
   danger: { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.danger }, text: { color: colors.danger } },
   light: { box: { backgroundColor: colors.paper }, text: { color: colors.bordeaux } },
+  outlineLight: { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.onDark }, text: { color: colors.onDark } },
 };
 
 interface IconButtonProps {

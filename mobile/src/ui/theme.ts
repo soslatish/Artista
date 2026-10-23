@@ -44,6 +44,7 @@ export const type = {
   small: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18, color: colors.graphite },
   smallStrong: { fontFamily: fonts.sansSemi, fontSize: 13, lineHeight: 18, color: colors.ink },
   price: { fontFamily: fonts.sansBold, fontSize: 15, lineHeight: 20, color: colors.ink },
+  priceLarge: { fontFamily: fonts.sansBold, fontSize: 24, lineHeight: 30, color: colors.ink },
 } as const;
 
 export type TypeVariant = keyof typeof type;

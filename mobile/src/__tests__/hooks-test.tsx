@@ -78,7 +78,7 @@ test('paged lists follow next_cursor and flatten pages', async () => {
 test('simple queries hit the right endpoints', async () => {
   handler = () => ({ status: 200, body: { data: { id: 'x' }, meta: { next_cursor: null } } });
   const { wrapper } = setup();
-  const hooks = [
+  const hooks: (() => { isSuccess: boolean })[] = [
     () => useCatalogMeta(),
     () => useArtwork('a1'),
     () => useUser('u1'),
@@ -89,7 +89,7 @@ test('simple queries hit the right endpoints', async () => {
     const { result } = await renderHook(h, { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   }
-  const paged = [
+  const paged: (() => { isSuccess: boolean })[] = [
     () => useMyArtworks('draft'),
     () => useFavorites(true),
     () => useUserArtworks('u1'),

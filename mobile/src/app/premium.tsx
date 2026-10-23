@@ -52,7 +52,7 @@ export default function PremiumScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <T variant="display">Премиум мастерской</T>
-      <T variant="title" color={colors.bordeaux}>
+      <T variant="priceLarge" color={colors.bordeaux}>
         990 ₽ в месяц
       </T>
       {perks.map((p) => (

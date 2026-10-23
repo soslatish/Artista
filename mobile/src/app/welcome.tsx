@@ -18,8 +18,8 @@ export default function WelcomeScreen() {
       </View>
       <View style={styles.actions}>
         <Button title="Создать аккаунт" variant="light" onPress={() => router.replace('/register')} />
-        <Button title="Войти" variant="secondary" style={styles.outline} onPress={() => router.replace('/login')} />
-        <Button title="Смотреть без входа" variant="ghost" style={styles.ghost} onPress={() => router.back()} />
+        <Button title="Войти" variant="outlineLight" onPress={() => router.replace('/login')} />
+        <Button title="Смотреть без входа" variant="outlineLight" style={styles.ghost} onPress={() => router.back()} />
       </View>
     </View>
   );
@@ -31,6 +31,5 @@ const styles = StyleSheet.create({
   logo: { width: '100%', height: 220 },
   lead: { maxWidth: 340 },
   actions: { gap: space.md },
-  outline: { borderColor: colors.onDark },
-  ghost: {},
+  ghost: { borderWidth: 0 },
 });

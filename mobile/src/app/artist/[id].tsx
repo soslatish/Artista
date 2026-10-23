@@ -127,7 +127,7 @@ function ArtistHeader({ u, tab, onTab }: { u: PublicUser; tab: 'works' | 'review
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <View style={styles.stat}>
-      <T variant="title">{value}</T>
+      <T variant="priceLarge">{value}</T>
       <T variant="small">{label}</T>
     </View>
   );

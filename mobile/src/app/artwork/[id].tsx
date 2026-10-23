@@ -138,11 +138,11 @@ function ArtworkView({ a }: { a: Artwork }) {
         </View>
 
         <View style={styles.body}>
-          {a.status !== 'published' ? <Notice tone={a.status === 'sold' ? 'info' : 'danger'} text={statusLabel(a.status)} /> : null}
+          {a.status !== 'published' ? <Notice tone={a.status === 'hidden' ? 'danger' : 'info'} text={statusLabel(a.status)} /> : null}
           <T variant="display" style={styles.titleItalic}>
             {a.title}
           </T>
-          <T variant="title">{formatPrice(a.price_kop)}</T>
+          <T variant="priceLarge">{formatPrice(a.price_kop)}</T>
 
           <Pressable
             accessibilityRole="button"
@@ -194,7 +194,7 @@ function ArtworkView({ a }: { a: Artwork }) {
         {mine ? (
           <>
             {a.status === 'draft' || a.status === 'published' ? (
-              <Button title="Снять с продажи" variant="danger" style={styles.flex} loading={archive.isPending} onPress={confirmArchive} />
+              <Button title={a.status === 'draft' ? 'В архив' : 'Снять с продажи'} variant="danger" style={styles.flex} loading={archive.isPending} onPress={confirmArchive} />
             ) : null}
             {a.status === 'draft' || a.status === 'published' || a.status === 'archived' ? (
               <Button title="Редактировать" style={styles.flex} onPress={() => router.push({ pathname: '/artwork/edit/[id]', params: { id: a.id } })} />

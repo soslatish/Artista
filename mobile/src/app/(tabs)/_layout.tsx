@@ -1,25 +1,13 @@
-import { router } from 'expo-router';
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useEffect } from 'react';
 
 import { flatten, useConversations } from '@/api/hooks';
 import { useSession } from '@/auth/session';
-import { usePushRegistration } from '@/features/push';
+import { useTabsBootstrap } from '@/features/welcome';
 import { colors, fonts } from '@/ui/theme';
-
-let welcomeShown = false;
 
 export default function TabsLayout() {
   const { user } = useSession();
-  usePushRegistration();
-  useEffect(() => {
-    // приветствие показываем гостю один раз за запуск
-    if (!user && !welcomeShown) {
-      welcomeShown = true;
-      const t = setTimeout(() => router.push('/welcome'), 0);
-      return () => clearTimeout(t);
-    }
-  }, [user]);
+  useTabsBootstrap();
   const conversations = useConversations(!!user);
   const unread = flatten(conversations.data).reduce((sum, c) => sum + c.unread, 0);
 

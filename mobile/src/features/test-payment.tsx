@@ -37,7 +37,7 @@ export function TestPaymentSheet({ payment, purpose, onPaid, onCancel }: Props) 
         <View style={styles.sheet}>
           <T variant="title">Оплата</T>
           <T variant="body">{purpose}</T>
-          <T variant="display">{payment ? formatPrice(payment.amount_kop) : ''}</T>
+          <T variant="priceLarge">{payment ? formatPrice(payment.amount_kop) : ''}</T>
           <Notice text="Тестовый режим: платёжная система ещё не подключена, деньги не списываются." />
           {error ? <Notice tone="danger" text={error} /> : null}
           <Button title="Оплатить (тест)" loading={busy} onPress={pay} />

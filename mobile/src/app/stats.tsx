@@ -20,7 +20,7 @@ export default function StatsScreen() {
         <T variant="small" color={colors.onDarkMuted}>
           Выручка за этот месяц
         </T>
-        <T variant="display" color={colors.onDark}>
+        <T variant="priceLarge" color={colors.onDark}>
           {formatPrice(s.revenue_month_kop)}
         </T>
         <T variant="small" color={colors.onDarkMuted}>
@@ -50,7 +50,7 @@ export default function StatsScreen() {
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.cell}>
-      <T variant="title">{value}</T>
+      <T variant="priceLarge">{value}</T>
       <T variant="small">{label}</T>
     </View>
   );
