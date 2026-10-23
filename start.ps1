@@ -1,4 +1,4 @@
-# Локальный запуск Artista на Windows: база + API (Docker) и мобильное приложение (Expo).
+﻿# Локальный запуск Artista на Windows: база + API (Docker) и мобильное приложение (Expo).
 # Запуск из корня репозитория:  powershell -ExecutionPolicy Bypass -File .\start.ps1
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
