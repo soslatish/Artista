@@ -32,7 +32,8 @@ export default function RegisterScreen() {
     setError('');
     try {
       await signUp({ ...form, role });
-      router.dismissTo('/');
+      if (router.canDismiss()) router.dismiss();
+      else router.replace('/');
     } catch (e) {
       setErrors(fieldErrors(e));
       setError(errorText(e));

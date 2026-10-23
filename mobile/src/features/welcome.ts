@@ -9,13 +9,13 @@ import { usePushRegistration } from './push';
 let welcomeShown = false;
 
 export function useTabsBootstrap(): void {
-  const { user } = useSession();
+  const { user, restoring } = useSession();
   usePushRegistration();
   useEffect(() => {
-    // приветствие показываем гостю один раз за запуск
-    if (user || welcomeShown) return;
+    // приветствие показываем гостю один раз за запуск (не тому, чья сессия восстанавливается)
+    if (user || restoring || welcomeShown) return;
     welcomeShown = true;
     const t = setTimeout(() => router.push('/welcome'), 0);
     return () => clearTimeout(t);
-  }, [user]);
+  }, [user, restoring]);
 }

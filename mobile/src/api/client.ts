@@ -93,12 +93,18 @@ async function rawRequest<T>(path: string, opts: RequestOptions, token: string |
   return { status: res.status, env: { data: json.data as T, meta: json.meta } };
 }
 
-/** Обновляет токены один раз для всех параллельных запросов. */
-async function refreshTokens(): Promise<boolean> {
-  if (!store?.getRefresh()) return false;
+/**
+ * Обновляет токены один раз для всех параллельных запросов.
+ * Если за время запроса сессия сменилась (выход, вход другим аккаунтом), результат отбрасывается —
+ * иначе старый refresh-токен вернул бы сессию после выхода.
+ */
+export async function refreshTokens(): Promise<boolean> {
+  const startedWith = store?.getRefresh();
+  if (!startedWith) return false;
   if (!refreshing) {
     refreshing = (async () => {
-      const r = await rawRequest<Tokens>('/auth/refresh', { method: 'POST', body: { refresh_token: store?.getRefresh() } }, null);
+      const r = await rawRequest<Tokens>('/auth/refresh', { method: 'POST', body: { refresh_token: startedWith } }, null);
+      if (store?.getRefresh() !== startedWith) return false;
       if (r.env?.data) {
         await store?.setTokens(r.env.data);
         return true;
@@ -110,6 +116,16 @@ async function refreshTokens(): Promise<boolean> {
     });
   }
   return refreshing;
+}
+
+/** Дождаться идущего обновления токенов (перед выходом). */
+export async function awaitPendingRefresh(): Promise<void> {
+  if (refreshing) await refreshing.catch(() => false);
+}
+
+/** Текущий access-токен (для WebSocket — читается в момент подключения). */
+export function currentAccessToken(): string | null {
+  return store?.getAccess() ?? null;
 }
 
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<Envelope<T>> {

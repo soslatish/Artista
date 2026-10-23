@@ -177,7 +177,7 @@ export function Avatar({ uri, name, size = 40 }: AvatarProps) {
 /** Отметка премиум-художника: золотой мазок, без слова «PRO». */
 export function PremiumMark() {
   return (
-    <View accessibilityLabel="Премиум-художник" style={styles.premium}>
+    <View accessible accessibilityRole="image" accessibilityLabel="Премиум-художник" style={styles.premium}>
       <Ionicons name="brush" size={11} color={colors.bordeaux} />
     </View>
   );

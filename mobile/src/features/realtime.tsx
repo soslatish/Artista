@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
-import { API_URL } from '@/api/client';
+import { API_URL, currentAccessToken, refreshTokens } from '@/api/client';
 import { keys } from '@/api/hooks';
 import type { Message } from '@/api/types';
 import { useSession } from '@/auth/session';
@@ -16,20 +16,32 @@ interface ServerEvent {
 }
 
 export function RealtimeBridge() {
-  const { accessToken, user } = useSession();
+  const { user } = useSession();
+  const userId = user?.id;
   const qc = useQueryClient();
 
   useEffect(() => {
-    if (!accessToken || !user) return;
+    if (!userId) return;
     let ws: WebSocket | null = null;
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
 
+    const refetchMissed = () => {
+      qc.invalidateQueries({ queryKey: keys.conversations });
+      qc.invalidateQueries({ queryKey: keys.notifications });
+      qc.invalidateQueries({ queryKey: ['messages'] });
+    };
+
     const connect = () => {
-      const url = `${API_URL.replace(/^http/, 'ws')}/api/v1/ws?token=${encodeURIComponent(accessToken)}`;
-      ws = new WebSocket(url);
+      // токен читаем в момент подключения: за время в фоне он мог обновиться
+      const token = currentAccessToken();
+      if (!token || closed) return;
+      let opened = false;
+      ws = new WebSocket(`${API_URL.replace(/^http/, 'ws')}/api/v1/ws?token=${encodeURIComponent(token)}`);
       ws.onopen = () => {
+        opened = true;
+        if (attempt > 0) refetchMissed(); // события, пропущенные без связи
         attempt = 0;
       };
       ws.onmessage = (e) => {
@@ -44,6 +56,8 @@ export function RealtimeBridge() {
           qc.invalidateQueries({ queryKey: keys.messages(m.conversation_id) });
           qc.invalidateQueries({ queryKey: keys.conversations });
         } else if (ev.type === 'read') {
+          const id = (ev.data as { conversation_id?: string }).conversation_id;
+          if (id) qc.invalidateQueries({ queryKey: keys.messages(id) });
           qc.invalidateQueries({ queryKey: keys.conversations });
         } else if (ev.type === 'notification') {
           qc.invalidateQueries({ queryKey: keys.notifications });
@@ -53,13 +67,18 @@ export function RealtimeBridge() {
       };
       ws.onclose = () => {
         if (closed) return;
-        timer = setTimeout(connect, RECONNECT_MS[Math.min(attempt++, RECONNECT_MS.length - 1)]);
+        const delay = RECONNECT_MS[Math.min(attempt++, RECONNECT_MS.length - 1)];
+        // соединение не открылось — скорее всего истёк access-токен: обновим перед повтором
+        const before = opened ? Promise.resolve(true) : refreshTokens().catch(() => false);
+        void before.then(() => {
+          if (!closed) timer = setTimeout(connect, delay);
+        });
       };
     };
     connect();
 
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && ws?.readyState === WebSocket.CLOSED) {
+      if (state === 'active' && (!ws || ws.readyState === WebSocket.CLOSED)) {
         clearTimeout(timer);
         connect();
       }
@@ -70,7 +89,7 @@ export function RealtimeBridge() {
       sub.remove();
       ws?.close();
     };
-  }, [accessToken, user, qc]);
+  }, [userId, qc]);
 
   return null;
 }

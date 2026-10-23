@@ -67,7 +67,9 @@ function Checkout({ artworkId }: { artworkId: string }) {
   if (art.isLoading) return <Loading />;
   if (art.isError || !art.data) return <ErrorState text={errorText(art.error)} />;
   const a = art.data;
-  const total = a.price_kop + (selected?.price_kop ?? 0);
+  // после создания заказа сумма и адрес фиксируются: платим ровно то, что записано в заказе
+  const locked = !!order;
+  const total = order ? order.total_kop : a.price_kop + (selected?.price_kop ?? 0);
 
   const submit = async () => {
     const errs = validateAddress(addr);
@@ -76,14 +78,14 @@ function Checkout({ artworkId }: { artworkId: string }) {
       setError('Заполните адрес доставки');
       return;
     }
-    if (!selected) {
+    if (!selected && !order) {
       setError('Выберите способ доставки');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      const o = order ?? (await post<Order>('/orders', { artwork_id: a.id, delivery_method: selected.method, address: addr }));
+      const o = order ?? (await post<Order>('/orders', { artwork_id: a.id, delivery_method: selected?.method, address: addr }));
       setOrder(o);
       const p = await post<Payment>(`/orders/${o.id}/pay`);
       if (p.test_mode) setPayment(p);
@@ -116,7 +118,8 @@ function Checkout({ artworkId }: { artworkId: string }) {
         </View>
 
         <T variant="title">Доставка</T>
-        <Field label="Город" value={addr.city} onChangeText={set('city')} error={errors['address.city']} autoComplete="address-line2" />
+        {locked ? <Notice text="Заказ создан — адрес и доставка зафиксированы. Чтобы изменить их, отмените заказ в разделе «Мои заказы»." /> : null}
+        <Field label="Город" value={addr.city} onChangeText={set('city')} error={errors['address.city']} autoComplete="address-line2" editable={!locked} />
         {quotes.isFetching ? <T variant="small">Считаем доставку…</T> : null}
         {quotes.isError ? <Notice tone="danger" text={errorText(quotes.error)} /> : null}
         <View style={styles.methods} accessibilityRole="radiogroup">
@@ -125,6 +128,7 @@ function Checkout({ artworkId }: { artworkId: string }) {
               key={q.method}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected?.method === q.method }}
+              disabled={locked}
               onPress={() => setMethod(q.method)}
               style={[styles.method, selected?.method === q.method && styles.methodOn]}>
               <View style={styles.flex}>
@@ -137,25 +141,28 @@ function Checkout({ artworkId }: { artworkId: string }) {
             </Pressable>
           ))}
         </View>
-        <Field label="Улица, дом, квартира" value={addr.street} onChangeText={set('street')} error={errors['address.street']} autoComplete="street-address" />
+        <Field label="Улица, дом, квартира" value={addr.street} onChangeText={set('street')} error={errors['address.street']} autoComplete="street-address" editable={!locked} />
         <View style={styles.row}>
           <View style={styles.flex}>
-            <Field label="Индекс" value={addr.postal_code} onChangeText={set('postal_code')} keyboardType="number-pad" maxLength={6} error={errors['address.postal_code']} autoComplete="postal-code" />
+            <Field label="Индекс" value={addr.postal_code} onChangeText={set('postal_code')} keyboardType="number-pad" maxLength={6} error={errors['address.postal_code']} autoComplete="postal-code" editable={!locked} />
           </View>
           <View style={styles.flex2}>
-            <Field label="Телефон" value={addr.phone} onChangeText={set('phone')} keyboardType="phone-pad" error={errors['address.phone']} autoComplete="tel" placeholder="+7" />
+            <Field label="Телефон" value={addr.phone} onChangeText={set('phone')} keyboardType="phone-pad" error={errors['address.phone']} autoComplete="tel" placeholder="+7" editable={!locked} />
           </View>
         </View>
-        <Field label="Получатель" value={addr.recipient_name} onChangeText={set('recipient_name')} error={errors['address.recipient_name']} autoComplete="name" />
-        <Field label="Комментарий курьеру" value={addr.comment} onChangeText={set('comment')} maxLength={300} />
+        <Field label="Получатель" value={addr.recipient_name} onChangeText={set('recipient_name')} error={errors['address.recipient_name']} autoComplete="name" editable={!locked} />
+        <Field label="Комментарий курьеру" value={addr.comment} onChangeText={set('comment')} maxLength={300} editable={!locked} />
 
         <Divider />
         <Line label="Работа" value={formatPrice(a.price_kop)} />
-        <Line label="Доставка" value={selected ? (selected.price_kop === 0 ? 'Бесплатно' : formatPrice(selected.price_kop)) : '—'} />
+        <Line
+          label="Доставка"
+          value={order ? (order.delivery_kop === 0 ? 'Бесплатно' : formatPrice(order.delivery_kop)) : selected ? (selected.price_kop === 0 ? 'Бесплатно' : formatPrice(selected.price_kop)) : '—'}
+        />
         <Line label="Итого" value={formatPrice(total)} strong />
         <Notice tone="success" text="Деньги переводятся художнику только после того, как вы подтвердите получение. Возврат — в течение 14 дней." />
         {error ? <Notice tone="danger" text={error} /> : null}
-        <Button title={`Оплатить ${formatPrice(total)}`} loading={busy} onPress={submit} disabled={!selected} />
+        <Button title={`Оплатить ${formatPrice(total)}`} loading={busy} onPress={submit} disabled={!selected && !order} />
       </ScrollView>
       <TestPaymentSheet payment={payment} purpose={`«${a.title}», ${a.artist.name}`} onPaid={paid} onCancel={() => setPayment(null)} />
     </KeyboardAvoidingView>

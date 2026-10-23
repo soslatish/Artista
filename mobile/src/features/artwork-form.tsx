@@ -79,7 +79,7 @@ export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
     save.mutate(
       { input: payload, publish },
       {
-        onSuccess: (a) => router.replace({ pathname: '/artwork/[id]', params: { id: a.id } }),
+        onSuccess: (a) => (artworkId ? router.back() : router.replace({ pathname: '/artwork/[id]', params: { id: a.id } })),
         onError: (e) => {
           setErrors(fieldErrors(e));
           setError(errorText(e));

@@ -203,9 +203,15 @@ function ReviewForm({ orderId, onDone }: { orderId: string; onDone: () => void }
   return (
     <View style={styles.review}>
       <T variant="heading">Как вам работа?</T>
-      <View style={styles.stars} accessibilityRole="adjustable" accessibilityValue={{ min: 0, max: 5, now: rating }}>
+      <View style={styles.stars} accessibilityRole="radiogroup" accessibilityLabel="Оценка">
         {[1, 2, 3, 4, 5].map((n) => (
-          <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} из 5`} onPress={() => setRating(n)} hitSlop={6}>
+          <Pressable
+            key={n}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: n === rating }}
+            accessibilityLabel={`${n} из 5`}
+            onPress={() => setRating(n)}
+            hitSlop={6}>
             <T variant="display" color={n <= rating ? colors.gold : colors.hairline}>
               ★
             </T>

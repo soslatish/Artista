@@ -10,6 +10,8 @@ import { Platform } from 'react-native';
 import { post } from '@/api/client';
 import { useSession } from '@/auth/session';
 
+import { setRegisteredPushToken } from './push-token';
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
 });
@@ -26,12 +28,14 @@ async function registerToken(): Promise<void> {
   if (status !== 'granted') return;
   const token = await Notifications.getExpoPushTokenAsync({ projectId });
   await post('/me/devices', { token: token.data, platform: Platform.OS });
+  setRegisteredPushToken(token.data);
 }
 
 export function usePushRegistration(): void {
   const { user } = useSession();
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     registerToken().catch(() => undefined);
-  }, [user]);
+  }, [userId]);
 }

@@ -11,10 +11,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ApiError } from '@/api/client';
 import { SessionProvider, useSession } from '@/auth/session';
+import { installQueryLifecycle } from '@/features/query-lifecycle';
 import { RealtimeBridge } from '@/features/realtime';
 import { colors, fonts } from '@/ui/theme';
 
 SplashScreen.preventAutoHideAsync();
+installQueryLifecycle();
 
 function makeClient() {
   return new QueryClient({

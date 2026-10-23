@@ -24,7 +24,8 @@ export default function LoginScreen() {
     setError('');
     try {
       await signIn(email, password);
-      router.dismissTo('/');
+      if (router.canDismiss()) router.dismiss();
+      else router.replace('/');
     } catch (e) {
       setError(errorText(e));
     } finally {

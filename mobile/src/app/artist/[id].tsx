@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
 import { flatten, useFollow, useReviews, useUser, useUserArtworks } from '@/api/hooks';
@@ -89,7 +89,10 @@ function ArtistHeader({ u, tab, onTab }: { u: PublicUser; tab: 'works' | 'review
             <Pressable
               key={k}
               accessibilityRole="link"
-              onPress={() => Linking.openURL(k === 'telegram' && !v.startsWith('http') ? `https://t.me/${v.replace('@', '')}` : v)}
+              onPress={() => {
+                const url = k === 'telegram' && !/^https?:/i.test(v) ? `https://t.me/${encodeURIComponent(v.replace(/^@/, ''))}` : v;
+                if (/^https?:\/\//i.test(url)) void Linking.openURL(url);
+              }}
               style={styles.link}>
               <Ionicons name={k === 'telegram' ? 'paper-plane-outline' : k === 'vk' ? 'people-outline' : 'globe-outline'} size={16} color={colors.bordeaux} />
               <T variant="smallStrong" color={colors.bordeaux}>
@@ -135,14 +138,17 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 function ReviewsList({ id, header }: { id: string; header: React.ReactElement }) {
   const q = useReviews(id);
-  const items = flatten(q.data);
   return (
-    <View style={styles.reviewsRoot}>
-      <View style={styles.pad}>{header}</View>
-      {q.isLoading ? <Loading /> : null}
-      {!q.isLoading && items.length === 0 ? <EmptyState icon="star-outline" title="Отзывов пока нет" text="Отзыв появляется после завершённой покупки." /> : null}
-      {items.map((r) => (
-        <View key={r.id} style={styles.review}>
+    <FlatList
+      style={styles.reviewsRoot}
+      data={flatten(q.data)}
+      keyExtractor={(r) => r.id}
+      ListHeaderComponent={<View style={styles.pad}>{header}</View>}
+      ListEmptyComponent={q.isLoading ? <Loading /> : <EmptyState icon="star-outline" title="Отзывов пока нет" text="Отзыв появляется после завершённой покупки." />}
+      onEndReached={() => q.hasNextPage && !q.isFetchingNextPage && q.fetchNextPage()}
+      onEndReachedThreshold={0.5}
+      renderItem={({ item: r }) => (
+        <View style={styles.review}>
           <View style={styles.reviewHead}>
             <Avatar uri={r.author.avatar_url} name={r.author.name} size={32} />
             <T variant="bodyStrong" style={styles.flex}>
@@ -159,8 +165,8 @@ function ReviewsList({ id, header }: { id: string; header: React.ReactElement })
           {r.text ? <T variant="body">{r.text}</T> : null}
           <T variant="small">{formatDate(r.created_at)}</T>
         </View>
-      ))}
-    </View>
+      )}
+    />
   );
 }
 

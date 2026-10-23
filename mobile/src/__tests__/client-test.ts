@@ -1,4 +1,4 @@
-import { ApiError, configureTokens, errorText, fieldErrors, get, patch, post, del, setFetch } from '@/api/client';
+import { ApiError, awaitPendingRefresh, configureTokens, currentAccessToken, del, errorText, fieldErrors, get, patch, post, setFetch } from '@/api/client';
 import { clearSession, loadSession, saveSession } from '@/api/storage';
 import type { Tokens } from '@/api/types';
 
@@ -88,5 +88,35 @@ describe('session storage', () => {
     await expect(loadSession()).resolves.toEqual({ accessToken: 'a', refreshToken: 'r' });
     await clearSession();
     await expect(loadSession()).resolves.toBeNull();
+  });
+});
+
+describe('refresh race with sign-out', () => {
+  it('drops refreshed tokens if the session changed meanwhile', async () => {
+    let access: string | null = 'a1';
+    let refresh: string | null = 'r1';
+    const setTokens = jest.fn((t: Tokens) => {
+      access = t.access_token;
+      refresh = t.refresh_token;
+    });
+    configureTokens({ getAccess: () => access, getRefresh: () => refresh, setTokens, onSessionExpired: jest.fn() });
+    let release: (r: Response) => void = () => undefined;
+    setFetch(((url: string) =>
+      url.endsWith('/auth/refresh')
+        ? new Promise<Response>((res) => {
+            release = res;
+          })
+        : Promise.resolve(json(401, { error: { code: 'unauthorized', message: 'x' } }))) as unknown as typeof fetch);
+    const pending = get('/me').catch(() => 'failed');
+    await new Promise((r) => setTimeout(r, 0));
+    // пользователь вышел, пока шёл refresh
+    access = null;
+    refresh = null;
+    release(json(200, { data: { access_token: 'a2', refresh_token: 'r2', expires_in: 900 } }));
+    await awaitPendingRefresh();
+    await pending;
+    expect(setTokens).not.toHaveBeenCalled();
+    expect(refresh).toBeNull();
+    expect(currentAccessToken()).toBeNull();
   });
 });

@@ -22,7 +22,8 @@ const feeds: { key: Feed; label: string }[] = [
 export default function GalleryScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useSession();
-  const [feed, setFeed] = useState<Feed>('new');
+  const [selectedFeed, setFeed] = useState<Feed>('new');
+  const feed: Feed = !user && selectedFeed === 'for_you' ? 'new' : selectedFeed; // «Для вас» только с аккаунтом
   const q = useArtworks({ feed });
   const notifications = useNotifications(!!user);
   const unread = notifications.data?.pages[0]?.meta.unread ?? 0;

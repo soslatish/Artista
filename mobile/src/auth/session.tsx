@@ -2,9 +2,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { configureTokens, get, post } from '@/api/client';
+import { ApiError, awaitPendingRefresh, configureTokens, get, post } from '@/api/client';
 import { clearSession, loadSession, saveSession } from '@/api/storage';
 import type { AuthResponse, Me, Role, Tokens } from '@/api/types';
+import { registeredPushToken } from '@/features/push-token';
 
 interface SignUpInput {
   email: string;
@@ -17,6 +18,8 @@ interface SignUpInput {
 interface SessionValue {
   ready: boolean;
   user: Me | null;
+  /** Есть сохранённая сессия, но профиль ещё не загружен (например, нет сети). */
+  restoring: boolean;
   accessToken: string | null;
   signIn(email: string, password: string): Promise<void>;
   signUp(input: SignUpInput): Promise<void>;
@@ -32,6 +35,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<Me | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const tokens = useRef<{ access: string | null; refresh: string | null }>({ access: null, refresh: null });
 
@@ -39,6 +43,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     tokens.current = { access: null, refresh: null };
     setAccessToken(null);
     setUser(null);
+    setRestoring(false);
     qc.clear();
     await clearSession();
   }, [qc]);
@@ -61,24 +66,39 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => configureTokens(null);
   }, [reset, storeTokens]);
 
+  // восстановление сессии: при отсутствии сети повторяем загрузку профиля, не выкидывая пользователя
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const loadMe = async (attempt: number): Promise<void> => {
+      try {
+        const me = await get<Me>('/me');
+        if (active) {
+          setUser(me);
+          setRestoring(false);
+        }
+      } catch (e) {
+        const offline = e instanceof ApiError && (e.status === 0 || e.status >= 500);
+        if (active && offline && tokens.current.refresh) {
+          timer = setTimeout(() => void loadMe(attempt + 1), Math.min(30_000, 2_000 * 2 ** attempt));
+        } else if (active) {
+          setRestoring(false);
+        }
+      }
+    };
     (async () => {
       const saved = await loadSession();
       if (saved) {
         tokens.current = { access: saved.accessToken, refresh: saved.refreshToken };
         setAccessToken(saved.accessToken);
-        try {
-          const me = await get<Me>('/me');
-          if (active) setUser(me);
-        } catch {
-          if (active && !tokens.current.access) setUser(null);
-        }
+        setRestoring(true);
+        await loadMe(0);
       }
       if (active) setReady(true);
     })();
     return () => {
       active = false;
+      clearTimeout(timer);
     };
   }, []);
 
@@ -106,10 +126,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    await awaitPendingRefresh(); // иначе выход разойдётся с ротацией refresh-токена
     const refresh = tokens.current.refresh;
     if (refresh) {
       try {
-        await post('/auth/logout', { refresh_token: refresh });
+        // device_token — чтобы push этого аккаунта больше не приходили на устройство
+        await post('/auth/logout', { refresh_token: refresh, device_token: registeredPushToken() ?? '' });
       } catch {
         /* выходим локально даже без сети */
       }
@@ -118,8 +140,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [reset]);
 
   const value = useMemo<SessionValue>(
-    () => ({ ready, user, accessToken, signIn, signUp, signOut, applyAuth, setUser }),
-    [ready, user, accessToken, signIn, signUp, signOut, applyAuth],
+    () => ({ ready, user, restoring, accessToken, signIn, signUp, signOut, applyAuth, setUser }),
+    [ready, user, restoring, accessToken, signIn, signUp, signOut, applyAuth],
   );
   return <SessionContext value={value}>{children}</SessionContext>;
 }
