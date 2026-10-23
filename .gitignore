@@ -19,3 +19,4 @@ mobile/android/
 .env.*
 !.env.example
 .DS_Store
+infra/.seeded

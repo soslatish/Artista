@@ -46,6 +46,15 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
+  # демо-данные: docker compose --profile demo run --rm seed
+  seed:
+    image: python:3.12-slim
+    profiles: ["demo"]
+    depends_on: [nginx]
+    volumes:
+      - ../backend/scripts:/scripts:ro
+    command: sh -c "pip install -q --disable-pip-version-check pillow && python /scripts/seed_demo.py http://nginx"
+
 volumes:
   pgdata:
   uploads:
