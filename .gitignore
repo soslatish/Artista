@@ -1,0 +1,21 @@
+# backend
+backend/uploads/
+backend/cover.out
+backend/api
+# mobile
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+# env
+.env
+.env.*
+!.env.example
+.DS_Store
