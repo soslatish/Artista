@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	resetCodeTTL     = 15 * time.Minute
-	resetMaxAttempts = 5
+	resetCodeTTL         = 15 * time.Minute
+	resetMaxAttempts     = 5  // попыток на один код
+	resetCodesPerHour    = 3  // кодов на аккаунт в час
+	resetFailuresPerHour = 10 // неверных кодов на аккаунт в час (по всем кодам)
 )
 
 // dummyHash — чтобы вход с несуществующим e-mail занимал столько же времени.
@@ -42,9 +44,14 @@ func (s *Server) issueTokens(ctx context.Context, q querier, userID, role string
 	if err != nil {
 		return tokenPair{}, err
 	}
-	if _, err := q.Exec(ctx, `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
-		userID, hash, time.Now().Add(s.Config.RefreshTTL)); err != nil {
+	tag, err := q.Exec(ctx, `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+		SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL)`,
+		userID, hash, time.Now().Add(s.Config.RefreshTTL))
+	if err != nil {
 		return tokenPair{}, fmt.Errorf("store refresh token: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return tokenPair{}, httpx.Unauthorized("Аккаунт недоступен")
 	}
 	return tokenPair{AccessToken: access, RefreshToken: refresh, ExpiresIn: int(s.Tokens.TTL().Seconds())}, nil
 }
@@ -103,9 +110,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
+	email := domain.NormalizeEmail(in.Email)
+	if !s.accountLimiter.Allow("login:" + email) {
+		return httpx.TooMany()
+	}
 	var id, hash, role string
-	err := s.DB.QueryRow(r.Context(), `SELECT id, password_hash, role FROM users
-		WHERE lower(email) = $1 AND deleted_at IS NULL`, domain.NormalizeEmail(in.Email)).Scan(&id, &hash, &role)
+	var banned bool
+	err := s.DB.QueryRow(r.Context(), `SELECT id, password_hash, role, banned_at IS NOT NULL FROM users
+		WHERE lower(email) = $1 AND deleted_at IS NULL`, email).Scan(&id, &hash, &role, &banned)
 	if isNoRows(err) {
 		auth.CheckPassword(dummyHash, in.Password)
 		return httpx.Unauthorized("Неверный e-mail или пароль")
@@ -115,6 +127,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	if !auth.CheckPassword(hash, in.Password) {
 		return httpx.Unauthorized("Неверный e-mail или пароль")
+	}
+	if banned {
+		return httpx.Forbidden("Аккаунт заблокирован модератором")
 	}
 	tokens, err := s.issueTokens(r.Context(), s.DB, id, role)
 	if err != nil {
@@ -146,7 +161,7 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) error {
 		var revoked *time.Time
 		err := tx.QueryRow(r.Context(), `SELECT t.id, t.user_id, t.expires_at, t.revoked_at, u.role
 			FROM refresh_tokens t JOIN users u ON u.id = t.user_id
-			WHERE t.token_hash = $1 AND u.deleted_at IS NULL FOR UPDATE OF t`, hash).
+			WHERE t.token_hash = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL FOR UPDATE OF t`, hash).
 			Scan(&tokenID, &userID, &expires, &revoked, &role)
 		if isNoRows(err) {
 			return httpx.Unauthorized("Сессия истекла, войдите снова")
@@ -182,13 +197,22 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	var in struct {
 		RefreshToken string `json:"refresh_token"`
+		DeviceToken  string `json:"device_token"`
 	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	if _, err := s.DB.Exec(r.Context(), `UPDATE refresh_tokens SET revoked_at = now()
-		WHERE token_hash = $1 AND revoked_at IS NULL`, auth.HashToken(in.RefreshToken)); err != nil {
+	var userID string
+	err := s.DB.QueryRow(r.Context(), `UPDATE refresh_tokens SET revoked_at = now()
+		WHERE token_hash = $1 AND revoked_at IS NULL RETURNING user_id`, auth.HashToken(in.RefreshToken)).Scan(&userID)
+	if err != nil && !isNoRows(err) {
 		return err
+	}
+	// push на общем устройстве после выхода приходить не должен
+	if userID != "" && in.DeviceToken != "" {
+		if _, err := s.DB.Exec(r.Context(), `DELETE FROM device_tokens WHERE token = $1 AND user_id = $2`, in.DeviceToken, userID); err != nil {
+			return err
+		}
 	}
 	httpx.NoContent(w)
 	return nil
@@ -204,13 +228,21 @@ func (s *Server) forgotPassword(w http.ResponseWriter, r *http.Request) error {
 	}
 	email := domain.NormalizeEmail(in.Email)
 	var userID string
-	err := s.DB.QueryRow(r.Context(), `SELECT id FROM users WHERE lower(email) = $1 AND deleted_at IS NULL`, email).Scan(&userID)
+	var recent int
+	err := s.DB.QueryRow(r.Context(), `SELECT u.id,
+			(SELECT count(*) FROM password_resets pr WHERE pr.user_id = u.id AND pr.created_at > now() - interval '1 hour')
+		FROM users u WHERE lower(u.email) = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL`, email).Scan(&userID, &recent)
 	if isNoRows(err) {
 		httpx.NoContent(w)
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+	if recent >= resetCodesPerHour {
+		// не раскрываем лимит: ответ тот же, письмо не отправляется
+		httpx.NoContent(w)
+		return nil
 	}
 	code, err := auth.NewResetCode()
 	if err != nil {
@@ -244,26 +276,24 @@ func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) error {
 		return httpx.Validation(map[string]string{"password": msg})
 	}
 	invalid := httpx.BadRequest("Неверный или просроченный код")
-	hash, err := auth.HashPassword(in.Password)
-	if err != nil {
-		return err
-	}
 	var codeOK bool
-	err = s.withTx(r.Context(), func(tx pgx.Tx) error {
+	err := s.withTx(r.Context(), func(tx pgx.Tx) error {
 		var resetID, userID, codeHash string
-		var attempts int
-		err := tx.QueryRow(r.Context(), `SELECT pr.id, pr.user_id, pr.code_hash, pr.attempts
+		var attempts, hourFailures int
+		err := tx.QueryRow(r.Context(), `SELECT pr.id, pr.user_id, pr.code_hash, pr.attempts,
+				(SELECT coalesce(sum(attempts), 0) FROM password_resets h WHERE h.user_id = u.id AND h.created_at > now() - interval '1 hour')
 			FROM password_resets pr JOIN users u ON u.id = pr.user_id
-			WHERE lower(u.email) = $1 AND u.deleted_at IS NULL AND pr.used_at IS NULL AND pr.expires_at > now()
+			WHERE lower(u.email) = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL
+			  AND pr.used_at IS NULL AND pr.expires_at > now()
 			ORDER BY pr.created_at DESC LIMIT 1 FOR UPDATE OF pr`, domain.NormalizeEmail(in.Email)).
-			Scan(&resetID, &userID, &codeHash, &attempts)
+			Scan(&resetID, &userID, &codeHash, &attempts, &hourFailures)
 		if isNoRows(err) {
 			return invalid
 		}
 		if err != nil {
 			return err
 		}
-		if attempts >= resetMaxAttempts {
+		if attempts >= resetMaxAttempts || hourFailures >= resetFailuresPerHour {
 			return invalid
 		}
 		if auth.HashToken(strings.TrimSpace(in.Code)) != codeHash {
@@ -271,6 +301,11 @@ func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) error {
 			return err // попытку засчитываем (commit), ошибку вернём после транзакции
 		}
 		codeOK = true
+		// bcrypt — только после верного кода, чтобы перебор не нагружал CPU
+		hash, err := auth.HashPassword(in.Password)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(r.Context(), `UPDATE password_resets SET used_at = now() WHERE id = $1`, resetID); err != nil {
 			return err
 		}

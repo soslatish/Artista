@@ -89,6 +89,16 @@ func (s *Server) startConversation(w http.ResponseWriter, r *http.Request, u htt
 		}
 		buyer, artist = in.UserID, u.ID
 	}
+	if in.ArtworkID != nil {
+		var ok bool
+		if err := s.DB.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM artworks WHERE id = $1 AND artist_id = $2
+			AND status IN ('published','reserved','sold'))`, *in.ArtworkID, artist).Scan(&ok); err != nil {
+			return err
+		}
+		if !ok {
+			return httpx.NotFound("Работа не найдена")
+		}
+	}
 	var convID string
 	err = s.DB.QueryRow(r.Context(), `INSERT INTO conversations (buyer_id, artist_id, artwork_id) VALUES ($1, $2, $3)
 		ON CONFLICT (buyer_id, artist_id, coalesce(artwork_id, '00000000-0000-0000-0000-000000000000'::uuid))

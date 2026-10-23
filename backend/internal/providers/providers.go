@@ -68,9 +68,10 @@ type Pusher interface {
 // LogPusher пишет push в лог (заглушка до подключения Expo Push).
 type LogPusher struct{ Log *slog.Logger }
 
-func (p LogPusher) Push(_ context.Context, tokens []string, title, body string, _ map[string]any) error {
+func (p LogPusher) Push(_ context.Context, tokens []string, _, _ string, _ map[string]any) error {
+	// текст не логируем: в нём может быть переписка пользователей
 	if len(tokens) > 0 {
-		p.Log.Info("push (stub)", "devices", len(tokens), "title", title, "body", body)
+		p.Log.Info("push (stub)", "devices", len(tokens))
 	}
 	return nil
 }
@@ -83,10 +84,19 @@ type Mailer interface {
 }
 
 // LogMailer пишет письма в лог (заглушка до подключения SMTP).
-type LogMailer struct{ Log *slog.Logger }
+// Текст письма (с кодом сброса) выводится только при Verbose — для локальной разработки;
+// в prod этот провайдер запрещён конфигом.
+type LogMailer struct {
+	Log     *slog.Logger
+	Verbose bool
+}
 
 func (m LogMailer) Send(_ context.Context, to, subject, body string) error {
-	m.Log.Info("mail (stub)", "to", to, "subject", subject, "body", body)
+	if m.Verbose {
+		m.Log.Info("mail (stub)", "to", to, "subject", subject, "body", body)
+		return nil
+	}
+	m.Log.Info("mail (stub)", "subject", subject)
 	return nil
 }
 

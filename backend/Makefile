@@ -5,7 +5,7 @@ TEST_DB ?= postgres://artista:artista@localhost:5432/artista_test?sslmode=disabl
 .PHONY: run test cover lint
 
 run:
-	DATABASE_URL=$(DB) JWT_SECRET=dev-secret-dev-secret-dev-secret-32 go run ./cmd/api
+	DATABASE_URL=$(DB) JWT_SECRET=dev-secret-dev-secret-dev-secret-32 ALLOW_STUB_PAYMENTS=true go run ./cmd/api
 
 test:
 	TEST_DATABASE_URL=$(TEST_DB) go test -race -count=1 ./...

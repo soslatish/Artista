@@ -28,27 +28,33 @@ type Config struct {
 	WorkerInterval   time.Duration
 	AuthRatePerMin   int // лимит запросов на вход/регистрацию с одного IP в минуту
 	APIRatePerMin    int // общий лимит запросов с одного IP в минуту
+	// AllowStubPayments — явное разрешение тестовых платежей (иначе stub запрещён в любом окружении).
+	AllowStubPayments bool
+	// TrustProxyHeaders — брать IP клиента из X-Real-IP (только за своим nginx).
+	TrustProxyHeaders bool
 }
 
 // Load читает окружение и проверяет обязательные значения.
 func Load() (Config, error) {
 	c := Config{
-		Env:              env("APP_ENV", "dev"),
-		Addr:             env("HTTP_ADDR", ":8080"),
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
-		JWTSecret:        []byte(os.Getenv("JWT_SECRET")),
-		AccessTTL:        durationEnv("ACCESS_TTL", 15*time.Minute),
-		RefreshTTL:       durationEnv("REFRESH_TTL", 30*24*time.Hour),
-		PublicBaseURL:    strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
-		UploadDir:        env("UPLOAD_DIR", "./uploads"),
-		MaxUploadBytes:   int64Env("MAX_UPLOAD_BYTES", 10<<20),
-		PaymentsProvider: env("PAYMENTS_PROVIDER", "stub"),
-		PushProvider:     env("PUSH_PROVIDER", "log"),
-		MailProvider:     env("MAIL_PROVIDER", "log"),
-		CORSOrigins:      splitList(env("CORS_ORIGINS", "*")),
-		WorkerInterval:   durationEnv("WORKER_INTERVAL", time.Minute),
-		AuthRatePerMin:   int(int64Env("AUTH_RATE_PER_MIN", 20)),
-		APIRatePerMin:    int(int64Env("API_RATE_PER_MIN", 600)),
+		Env:               env("APP_ENV", "dev"),
+		Addr:              env("HTTP_ADDR", ":8080"),
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		JWTSecret:         []byte(os.Getenv("JWT_SECRET")),
+		AccessTTL:         durationEnv("ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:        durationEnv("REFRESH_TTL", 30*24*time.Hour),
+		PublicBaseURL:     strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		UploadDir:         env("UPLOAD_DIR", "./uploads"),
+		MaxUploadBytes:    int64Env("MAX_UPLOAD_BYTES", 10<<20),
+		PaymentsProvider:  env("PAYMENTS_PROVIDER", "stub"),
+		PushProvider:      env("PUSH_PROVIDER", "log"),
+		MailProvider:      env("MAIL_PROVIDER", "log"),
+		CORSOrigins:       splitList(env("CORS_ORIGINS", "*")),
+		WorkerInterval:    durationEnv("WORKER_INTERVAL", time.Minute),
+		AuthRatePerMin:    int(int64Env("AUTH_RATE_PER_MIN", 20)),
+		APIRatePerMin:     int(int64Env("API_RATE_PER_MIN", 600)),
+		AllowStubPayments: os.Getenv("ALLOW_STUB_PAYMENTS") == "true",
+		TrustProxyHeaders: os.Getenv("TRUST_PROXY_HEADERS") == "true",
 	}
 	var problems []string
 	if c.DatabaseURL == "" {
@@ -57,13 +63,38 @@ func Load() (Config, error) {
 	if len(c.JWTSecret) < 32 {
 		problems = append(problems, "JWT_SECRET must be at least 32 bytes")
 	}
-	if c.Env == "prod" && c.PaymentsProvider == "stub" {
-		problems = append(problems, "PAYMENTS_PROVIDER=stub is not allowed in prod")
+	problems = append(problems, c.providerProblems()...)
+	if c.WorkerInterval <= 0 {
+		problems = append(problems, "WORKER_INTERVAL must be positive")
 	}
 	if len(problems) > 0 {
 		return Config{}, errors.New(strings.Join(problems, "; "))
 	}
 	return c, nil
+}
+
+// providerProblems проверяет, что выбранные провайдеры реализованы и допустимы в окружении.
+func (c Config) providerProblems() []string {
+	var p []string
+	switch c.PaymentsProvider {
+	case "stub":
+		if c.Env == "prod" {
+			p = append(p, "PAYMENTS_PROVIDER=stub is not allowed in prod")
+		} else if !c.AllowStubPayments {
+			p = append(p, "PAYMENTS_PROVIDER=stub requires ALLOW_STUB_PAYMENTS=true")
+		}
+	default:
+		p = append(p, "PAYMENTS_PROVIDER "+c.PaymentsProvider+" is not implemented yet")
+	}
+	if c.MailProvider != "log" {
+		p = append(p, "MAIL_PROVIDER "+c.MailProvider+" is not implemented yet")
+	} else if c.Env == "prod" {
+		p = append(p, "MAIL_PROVIDER=log is not allowed in prod")
+	}
+	if c.PushProvider != "log" {
+		p = append(p, "PUSH_PROVIDER "+c.PushProvider+" is not implemented yet")
+	}
+	return p
 }
 
 // StubPayments — включён ли тестовый платёжный провайдер.

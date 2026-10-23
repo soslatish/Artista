@@ -35,56 +35,69 @@ func (s *Server) notify(ctx context.Context, userID, typ, title, body string, da
 
 // pushOnly отправляет push без сохранения в ленту уведомлений.
 func (s *Server) pushOnly(ctx context.Context, userID, title, body string, data map[string]any) {
-	rows, err := s.DB.Query(ctx, `SELECT token FROM device_tokens WHERE user_id = $1`, userID)
+	s.pushTo(ctx, []string{userID}, title, body, data)
+}
+
+// pushTo отправляет одно push-уведомление на все устройства перечисленных пользователей.
+func (s *Server) pushTo(ctx context.Context, userIDs []string, title, body string, data map[string]any) {
+	if len(userIDs) == 0 {
+		return
+	}
+	tokens, err := collectIDs(ctx, s.DB, `SELECT token FROM device_tokens WHERE user_id = ANY($1::uuid[])`, userIDs)
 	if err != nil {
 		s.Log.Error("load device tokens", "err", err)
 		return
 	}
-	var tokens []string
-	for rows.Next() {
-		var t string
-		if rows.Scan(&t) == nil {
-			tokens = append(tokens, t)
+	for start := 0; start < len(tokens); start += pushBatch {
+		batch := tokens[start:min(start+pushBatch, len(tokens))]
+		if err := s.Pusher.Push(ctx, batch, title, body, data); err != nil {
+			s.Log.Error("push", "err", err)
 		}
 	}
-	rows.Close()
-	if err := s.Pusher.Push(ctx, tokens, title, body, data); err != nil {
-		s.Log.Error("push", "err", err)
-	}
 }
 
-// notifyFollowersAsync уведомляет подписчиков о новой работе в фоне.
+const pushBatch = 100 // лимит Expo Push на один запрос
+
+// notifyFollowersAsync уведомляет подписчиков о новой работе в фоне (остановка сервера дождётся).
 func (s *Server) notifyFollowersAsync(artistID, artworkID, title string) {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	s.goBackground(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		s.notifyFollowers(ctx, artistID, artworkID, title)
-	}()
+	})
 }
 
+// notifyFollowers создаёт уведомления всем подписчикам одним запросом и рассылает push пачками.
 func (s *Server) notifyFollowers(ctx context.Context, artistID, artworkID, title string) {
 	var artistName string
 	if err := s.DB.QueryRow(ctx, `SELECT name FROM users WHERE id = $1`, artistID).Scan(&artistName); err != nil {
 		s.Log.Error("notify followers", "err", err)
 		return
 	}
-	rows, err := s.DB.Query(ctx, `SELECT follower_id FROM follows WHERE artist_id = $1`, artistID)
+	heading := "Новая работа: " + artistName
+	body := fmt.Sprintf("«%s»", title)
+	data := map[string]any{"artwork_id": artworkID}
+	rows, err := s.DB.Query(ctx, `INSERT INTO notifications (user_id, type, title, body, data)
+		SELECT f.follower_id, 'new_artwork', $2::text, $3::text, $4::jsonb FROM follows f JOIN users u ON u.id = f.follower_id
+		WHERE f.artist_id = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL
+		RETURNING id, user_id, type, title, body, data, read_at, created_at`, artistID, heading, body, data)
 	if err != nil {
 		s.Log.Error("notify followers", "err", err)
 		return
 	}
 	var followers []string
 	for rows.Next() {
-		var id string
-		if rows.Scan(&id) == nil {
-			followers = append(followers, id)
+		var n notificationDTO
+		var userID string
+		if err := rows.Scan(&n.ID, &userID, &n.Type, &n.Title, &n.Body, &n.Data, &n.ReadAt, &n.CreatedAt); err != nil {
+			s.Log.Error("notify followers", "err", err)
+			break
 		}
+		followers = append(followers, userID)
+		s.hub.Send(userID, Event{Type: "notification", Data: n})
 	}
 	rows.Close()
-	for _, f := range followers {
-		s.notify(ctx, f, "new_artwork", "Новая работа: "+artistName, fmt.Sprintf("«%s»", title),
-			map[string]any{"artwork_id": artworkID})
-	}
+	s.pushTo(ctx, followers, heading, body, data)
 }
 
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request, u httpx.User) error {

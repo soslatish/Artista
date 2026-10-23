@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,19 +37,59 @@ type Deps struct {
 // Server — HTTP API.
 type Server struct {
 	Deps
-	hub         *Hub
-	authLimiter *httpx.RateLimiter
-	apiLimiter  *httpx.RateLimiter
+	hub            *Hub
+	authLimiter    *httpx.RateLimiter
+	apiLimiter     *httpx.RateLimiter
+	accountLimiter *httpx.RateLimiter // попытки входа по одному e-mail
+	uploadLimiter  *httpx.RateLimiter // загрузки файлов одним пользователем
+	active         *activeCache
+	bg             sync.WaitGroup // фоновые задачи (воркер, рассылки) — ждём при остановке
 }
+
+const (
+	loginAttemptsPerAccount = 10
+	loginWindow             = 15 * time.Minute
+	uploadsPerUserHour      = 60
+)
 
 // New создаёт сервер.
 func New(d Deps) *Server {
 	return &Server{
-		Deps:        d,
-		hub:         NewHub(),
-		authLimiter: httpx.NewRateLimiter(positive(d.Config.AuthRatePerMin, 20), time.Minute),
-		apiLimiter:  httpx.NewRateLimiter(positive(d.Config.APIRatePerMin, 600), time.Minute),
+		Deps:           d,
+		hub:            NewHub(),
+		authLimiter:    httpx.NewRateLimiter(positive(d.Config.AuthRatePerMin, 20), time.Minute),
+		apiLimiter:     httpx.NewRateLimiter(positive(d.Config.APIRatePerMin, 600), time.Minute),
+		accountLimiter: httpx.NewRateLimiter(loginAttemptsPerAccount, loginWindow),
+		uploadLimiter:  httpx.NewRateLimiter(uploadsPerUserHour, time.Hour),
+		active:         newActiveCache(30 * time.Second),
 	}
+}
+
+// StartWorker запускает фоновый воркер (дедлайны заказов, очередь возвратов).
+func (s *Server) StartWorker(ctx context.Context) {
+	s.goBackground(func() { s.RunWorker(ctx) })
+}
+
+// CloseRealtime закрывает все WebSocket-подключения.
+func (s *Server) CloseRealtime() { s.hub.CloseAll() }
+
+// Shutdown закрывает WebSocket-подключения и ждёт фоновые задачи.
+// Вызывать после http.Server.Shutdown и отмены контекста воркера.
+func (s *Server) Shutdown() {
+	s.hub.CloseAll()
+	s.bg.Wait()
+}
+
+// WaitBackground ждёт завершения текущих фоновых задач (для тестов и диагностики).
+func (s *Server) WaitBackground() { s.bg.Wait() }
+
+// goBackground запускает задачу, которую дождётся Shutdown.
+func (s *Server) goBackground(fn func()) {
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		fn()
+	}()
 }
 
 func positive(v, def int) int {
@@ -75,6 +116,13 @@ func (s *Server) authed(fn func(w http.ResponseWriter, r *http.Request, u httpx.
 		u, ok := s.userFromRequest(r)
 		if !ok {
 			return httpx.Unauthorized("Требуется вход")
+		}
+		active, err := s.isActive(r.Context(), u.ID)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return httpx.Unauthorized("Аккаунт недоступен")
 		}
 		return fn(w, r.WithContext(httpx.WithUser(r.Context(), u)), u)
 	})
@@ -112,13 +160,15 @@ func (s *Server) Handler() http.Handler {
 		httpx.Logger(s.Log),
 		httpx.SecurityHeaders,
 		httpx.CORS(s.Config.CORSOrigins),
-		s.apiLimiter.Middleware(s.Log),
+		s.apiLimiter.Middleware(s.Log, s.Config.TrustProxyHeaders),
 	)
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
 	const v = "/api/v1"
-	limited := func(h http.HandlerFunc) http.Handler { return s.authLimiter.Middleware(s.Log)(h) }
+	limited := func(h http.HandlerFunc) http.Handler {
+		return s.authLimiter.Middleware(s.Log, s.Config.TrustProxyHeaders)(h)
+	}
 
 	mux.HandleFunc("GET /healthz", s.h(s.health))
 	mux.HandleFunc("GET /files/{name}", s.serveFile)
@@ -251,4 +301,69 @@ func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 // withTx выполняет fn в транзакции.
 func (s *Server) withTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, s.DB, fn)
+}
+
+// ---------- активность пользователя ----------
+
+// activeCache кэширует признак «аккаунт не удалён и не заблокирован» на короткое время,
+// чтобы не ходить в БД на каждый запрос. Блокировка и удаление сбрасывают запись сразу.
+type activeCache struct {
+	mu  sync.Mutex
+	ttl time.Duration
+	m   map[string]activeEntry
+}
+
+type activeEntry struct {
+	active bool
+	exp    time.Time
+}
+
+func newActiveCache(ttl time.Duration) *activeCache {
+	return &activeCache{ttl: ttl, m: map[string]activeEntry{}}
+}
+
+func (c *activeCache) get(id string) (bool, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.m[id]
+	if !ok || time.Now().After(e.exp) {
+		return false, false
+	}
+	return e.active, true
+}
+
+func (c *activeCache) set(id string, active bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.m) > 50_000 {
+		c.m = map[string]activeEntry{}
+	}
+	c.m[id] = activeEntry{active: active, exp: time.Now().Add(c.ttl)}
+}
+
+func (s *Server) isActive(ctx context.Context, userID string) (bool, error) {
+	if v, ok := s.active.get(userID); ok {
+		return v, nil
+	}
+	var active bool
+	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL)`, userID).Scan(&active)
+	if err != nil {
+		return false, err
+	}
+	s.active.set(userID, active)
+	return active, nil
+}
+
+// revokeAccess — после блокировки/удаления: сбросить кэш и закрыть WebSocket.
+func (s *Server) revokeAccess(userID string) {
+	s.active.set(userID, false)
+	s.hub.Disconnect(userID)
+}
+
+// nullableID — пустой id зрителя превращается в NULL (сравнение с uuid-колонкой без ::text).
+func nullableID(id string) any {
+	if id == "" {
+		return nil
+	}
+	return id
 }

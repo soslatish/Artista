@@ -50,7 +50,7 @@ func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
 	p := parsePage(r)
 
 	b := &queryBuilder{}
-	b.arg(viewer.ID) // $1 — зритель для is_favorite
+	b.arg(nullableID(viewer.ID)) // $1 — зритель для is_favorite
 	b.add("a.status = 'published'")
 	b.add("u.deleted_at IS NULL")
 
@@ -98,11 +98,11 @@ func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
 	case "for_you":
 		if viewer.ID != "" {
 			// подписки и категории из избранного; если ничего нет — популярное
-			b.add(`((NOT EXISTS (SELECT 1 FROM follows WHERE follower_id::text = $1)
-				  AND NOT EXISTS (SELECT 1 FROM favorites WHERE user_id::text = $1))
-				OR a.artist_id IN (SELECT artist_id FROM follows WHERE follower_id::text = $1)
-				OR a.category IN (SELECT DISTINCT a2.category FROM favorites f2 JOIN artworks a2 ON a2.id = f2.artwork_id WHERE f2.user_id::text = $1))`)
-			b.add("a.artist_id::text <> $1")
+			b.add(`((NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1::uuid)
+				  AND NOT EXISTS (SELECT 1 FROM favorites WHERE user_id = $1::uuid))
+				OR a.artist_id IN (SELECT artist_id FROM follows WHERE follower_id = $1::uuid)
+				OR a.category IN (SELECT DISTINCT a2.category FROM favorites f2 JOIN artworks a2 ON a2.id = f2.artwork_id WHERE f2.user_id = $1::uuid))`)
+			b.add("a.artist_id <> $1::uuid")
 		}
 		if sortKey == "" {
 			sortKey = "popular"
@@ -143,7 +143,7 @@ func escapeLike(s string) string {
 
 func (s *Server) listByCondition(w http.ResponseWriter, r *http.Request, viewerID, cond string, args ...any) error {
 	p := parsePage(r)
-	all := append([]any{viewerID}, args...)
+	all := append([]any{nullableID(viewerID)}, args...)
 	sql := fmt.Sprintf("%s WHERE %s ORDER BY a.created_at DESC, a.id DESC LIMIT %d OFFSET %d", artworkSelect, cond, p.limit, p.offset)
 	rows, err := s.DB.Query(r.Context(), sql, all...)
 	if err != nil {

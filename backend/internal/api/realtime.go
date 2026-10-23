@@ -23,28 +23,51 @@ type Event struct {
 
 // Hub хранит WebSocket-подключения пользователей (в пределах одного инстанса API).
 type Hub struct {
-	mu    sync.RWMutex
-	conns map[string]map[chan Event]struct{}
+	mu     sync.RWMutex
+	conns  map[string]map[chan Event]struct{}
+	kicked map[chan Event]chan struct{} // сигнал «закрыть подключение»
+	done   chan struct{}                // закрывается при остановке сервера
+	once   sync.Once
 }
 
 // NewHub создаёт хаб.
-func NewHub() *Hub { return &Hub{conns: map[string]map[chan Event]struct{}{}} }
+func NewHub() *Hub {
+	return &Hub{conns: map[string]map[chan Event]struct{}{}, kicked: map[chan Event]chan struct{}{}, done: make(chan struct{})}
+}
 
-func (h *Hub) subscribe(userID string) chan Event {
+func (h *Hub) subscribe(userID string) (chan Event, chan struct{}) {
 	ch := make(chan Event, 32)
+	kick := make(chan struct{})
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.conns[userID] == nil {
 		h.conns[userID] = map[chan Event]struct{}{}
 	}
 	h.conns[userID][ch] = struct{}{}
-	return ch
+	h.kicked[ch] = kick
+	return ch, kick
 }
+
+// Disconnect закрывает все подключения пользователя (блокировка, удаление аккаунта).
+func (h *Hub) Disconnect(userID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.conns[userID] {
+		if k, ok := h.kicked[ch]; ok {
+			close(k)
+			delete(h.kicked, ch)
+		}
+	}
+}
+
+// CloseAll сигнализирует всем подключениям завершиться (остановка сервера).
+func (h *Hub) CloseAll() { h.once.Do(func() { close(h.done) }) }
 
 func (h *Hub) unsubscribe(userID string, ch chan Event) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.conns[userID], ch)
+	delete(h.kicked, ch)
 	if len(h.conns[userID]) == 0 {
 		delete(h.conns, userID)
 	}
@@ -74,6 +97,10 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, r, s.Log, httpx.Unauthorized("Требуется вход"))
 		return
 	}
+	if active, err := s.isActive(r.Context(), u.ID); err != nil || !active {
+		httpx.Fail(w, r, s.Log, httpx.Unauthorized("Аккаунт недоступен"))
+		return
+	}
 	opts := &websocket.AcceptOptions{}
 	if slices.Contains(s.Config.CORSOrigins, "*") {
 		opts.InsecureSkipVerify = true // нативные клиенты не присылают Origin; токен обязателен
@@ -89,7 +116,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.CloseNow()
 
-	ch := s.hub.subscribe(u.ID)
+	ch, kick := s.hub.subscribe(u.ID)
 	defer s.hub.unsubscribe(u.ID, ch)
 
 	ctx := conn.CloseRead(r.Context()) // входящие сообщения клиенту не нужны
@@ -99,6 +126,12 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			conn.Close(websocket.StatusNormalClosure, "")
+			return
+		case <-kick:
+			conn.Close(websocket.StatusPolicyViolation, "access revoked")
+			return
+		case <-s.hub.done:
+			conn.Close(websocket.StatusGoingAway, "server shutdown")
 			return
 		case e := <-ch:
 			if err := writeEvent(ctx, conn, e); err != nil {

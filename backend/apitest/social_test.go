@@ -169,7 +169,18 @@ func TestReportsAndModeration(t *testing.T) {
 	}
 	expect(t, call(t, "GET", "/api/v1/artworks/"+a.ID, artist.Access, nil), http.StatusNotFound)
 	expect(t, call(t, "POST", "/api/v1/admin/reports/"+userRep.ID+"/resolve", adminToken, map[string]string{"action": "hide"}), http.StatusNoContent)
-	expect(t, call(t, "POST", "/api/v1/auth/login", "", map[string]string{"email": artist.Email, "password": artist.Password}), http.StatusUnauthorized)
+	r = call(t, "POST", "/api/v1/auth/login", "", map[string]string{"email": artist.Email, "password": artist.Password})
+	expect(t, r, http.StatusForbidden)
+	// заблокированный не возвращает доступ ни старым access-токеном, ни через «стать художником», ни сбросом пароля
+	expect(t, call(t, "GET", "/api/v1/me", artist.Access, nil), http.StatusUnauthorized)
+	expect(t, call(t, "POST", "/api/v1/me/become-artist", artist.Access, nil), http.StatusUnauthorized)
+	expect(t, call(t, "POST", "/api/v1/auth/refresh", "", map[string]string{"refresh_token": artist.Refresh}), http.StatusUnauthorized)
+	before := len(mailer.Sent)
+	expect(t, call(t, "POST", "/api/v1/auth/password/forgot", "", map[string]string{"email": artist.Email}), http.StatusNoContent)
+	if len(mailer.Sent) != before {
+		t.Fatal("banned user must not get a reset code")
+	}
+	expect(t, call(t, "GET", "/api/v1/users/"+artist.ID, "", nil), http.StatusNotFound)
 	r = call(t, "GET", "/api/v1/admin/reports?status=resolved", adminToken, nil)
 	r.into(t, &reports)
 	if len(reports) < 2 {

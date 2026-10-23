@@ -183,7 +183,8 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 	if in.Action != "hide" && in.Action != "reject" {
 		return httpx.Validation(map[string]string{"action": "hide или reject"})
 	}
-	return s.withTx(r.Context(), func(tx pgx.Tx) error {
+	var bannedUser string
+	err = s.withTx(r.Context(), func(tx pgx.Tx) error {
 		var targetType, targetID, status string
 		err := tx.QueryRow(r.Context(), `SELECT target_type, target_id, status FROM reports WHERE id = $1 FOR UPDATE`, id).Scan(&targetType, &targetID, &status)
 		if isNoRows(err) {
@@ -205,9 +206,16 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 			case "message":
 				q = `UPDATE messages SET body = 'Сообщение удалено модератором' WHERE id = $1`
 			case "user":
-				q = `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL;`
-				if _, err := tx.Exec(r.Context(), `UPDATE users SET password_hash = '!', updated_at = now() WHERE id = $1`, targetID); err != nil {
-					return err
+				bannedUser = targetID
+				q = `UPDATE users SET banned_at = now(), updated_at = now() WHERE id = $1 AND role <> 'admin'`
+				for _, extra := range []string{
+					`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+					`DELETE FROM device_tokens WHERE user_id = $1`,
+					`UPDATE artworks SET status = 'hidden', updated_at = now() WHERE artist_id = $1 AND status IN ('draft','published','archived')`,
+				} {
+					if _, err := tx.Exec(r.Context(), extra, targetID); err != nil {
+						return err
+					}
 				}
 			}
 			if _, err := tx.Exec(r.Context(), q, targetID); err != nil {
@@ -218,7 +226,14 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 			id, newStatus, strings.TrimSpace(in.Resolution)); err != nil {
 			return err
 		}
-		httpx.NoContent(w)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if bannedUser != "" {
+		s.revokeAccess(bannedUser)
+	}
+	httpx.NoContent(w) // только после успешного коммита
+	return nil
 }

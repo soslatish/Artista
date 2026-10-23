@@ -50,7 +50,7 @@ type artworkDTO struct {
 const artworkSelect = `SELECT a.id, a.title, a.description, a.category, a.style, a.technique, a.materials,
 	a.width_cm::float8, a.height_cm::float8, a.depth_cm::float8, a.year, a.price_kop, a.status, a.views,
 	(SELECT count(*) FROM favorites f WHERE f.artwork_id = a.id),
-	EXISTS(SELECT 1 FROM favorites f WHERE f.artwork_id = a.id AND f.user_id::text = $1),
+	EXISTS(SELECT 1 FROM favorites f WHERE f.artwork_id = a.id AND f.user_id = $1::uuid),
 	coalesce((SELECT array_agg(url ORDER BY position) FROM artwork_images i WHERE i.artwork_id = a.id), '{}'),
 	u.id, u.name, u.avatar_url, u.city, coalesce(u.premium_until > now(), false),
 	a.published_at, a.created_at
@@ -80,7 +80,7 @@ func collectArtworks(rows pgx.Rows) ([]artworkDTO, error) {
 }
 
 func loadArtwork(ctx context.Context, q querier, id, viewerID string) (artworkDTO, error) {
-	a, err := scanArtwork(q.QueryRow(ctx, artworkSelect+`WHERE a.id = $2`, viewerID, id))
+	a, err := scanArtwork(q.QueryRow(ctx, artworkSelect+`WHERE a.id = $2`, nullableID(viewerID), id))
 	if isNoRows(err) {
 		return artworkDTO{}, httpx.NotFound("Работа не найдена")
 	}
@@ -307,6 +307,7 @@ func (s *Server) publishArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 		return err
 	}
 	var title string
+	firstPublish := false
 	err = s.withTx(r.Context(), func(tx pgx.Tx) error {
 		cur, status, err := ownArtworkForUpdate(r.Context(), tx, id, u.ID)
 		if err != nil {
@@ -319,13 +320,17 @@ func (s *Server) publishArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 			return httpx.Validation(errs)
 		}
 		title = cur.Title
-		_, err = tx.Exec(r.Context(), `UPDATE artworks SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1`, id)
+		// подписчиков уведомляем только о первой публикации, не о возврате из архива
+		err = tx.QueryRow(r.Context(), `UPDATE artworks SET status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
+			WHERE id = $1 RETURNING published_at = now()`, id).Scan(&firstPublish)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	s.notifyFollowersAsync(u.ID, id, title)
+	if firstPublish {
+		s.notifyFollowersAsync(u.ID, id, title)
+	}
 	a, err := loadArtwork(r.Context(), s.DB, id, u.ID)
 	if err != nil {
 		return err

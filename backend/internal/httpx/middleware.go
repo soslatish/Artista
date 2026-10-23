@@ -148,11 +148,11 @@ func (l *RateLimiter) Allow(key string) bool {
 	return true
 }
 
-// Middleware ограничивает запросы по IP клиента.
-func (l *RateLimiter) Middleware(log *slog.Logger) func(http.Handler) http.Handler {
+// Middleware ограничивает запросы по ключу клиента (см. ClientKey).
+func (l *RateLimiter) Middleware(log *slog.Logger, trustProxy bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !l.Allow(ClientIP(r)) {
+			if !l.Allow(ClientKey(r, trustProxy)) {
 				Fail(w, r, log, TooMany())
 				return
 			}
@@ -161,17 +161,32 @@ func (l *RateLimiter) Middleware(log *slog.Logger) func(http.Handler) http.Handl
 	}
 }
 
-// ClientIP — IP клиента. X-Real-IP учитывается: API работает за доверенным
-// reverse-proxy (nginx), который его выставляет.
-func ClientIP(r *http.Request) string {
-	if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
-		return ip
+// ClientIP — IP клиента. X-Real-IP учитывается, только если API работает за своим
+// reverse-proxy (trustProxy), который перезаписывает этот заголовок.
+func ClientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if ip := strings.TrimSpace(r.Header.Get("X-Real-IP")); ip != "" {
+			return ip
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// ClientKey — ключ для лимитов: IPv4 целиком, IPv6 — по сети /64
+// (у одного абонента обычно весь /64, иначе лимит обходится сменой адреса).
+func ClientKey(r *http.Request, trustProxy bool) string {
+	ip := net.ParseIP(ClientIP(r, trustProxy))
+	if ip == nil {
+		return ClientIP(r, trustProxy)
+	}
+	if ip.To4() == nil {
+		return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+	}
+	return ip.String()
 }
 
 // Chain применяет middleware в порядке перечисления (первый — внешний).

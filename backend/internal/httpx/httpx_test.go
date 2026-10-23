@@ -102,11 +102,14 @@ func TestMiddlewareChain(t *testing.T) {
 
 func TestRateLimitMiddlewareAndClientIP(t *testing.T) {
 	l := NewRateLimiter(1, time.Minute)
-	h := l.Middleware(quiet)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	h := l.Middleware(quiet, true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Real-IP", "1.2.3.4")
-	if ClientIP(r) != "1.2.3.4" {
-		t.Fatal("X-Real-IP")
+	if ClientIP(r, true) != "1.2.3.4" {
+		t.Fatal("X-Real-IP must be used behind trusted proxy")
+	}
+	if ClientIP(r, false) == "1.2.3.4" {
+		t.Fatal("X-Real-IP must be ignored without trusted proxy")
 	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
@@ -116,7 +119,19 @@ func TestRateLimitMiddlewareAndClientIP(t *testing.T) {
 		t.Fatalf("got %d", rec.Code)
 	}
 	r2 := httptest.NewRequest("GET", "/", nil)
-	if ClientIP(r2) != "192.0.2.1" {
-		t.Fatalf("remote addr ip: %s", ClientIP(r2))
+	if ClientIP(r2, true) != "192.0.2.1" {
+		t.Fatalf("remote addr ip: %s", ClientIP(r2, true))
+	}
+	v6a := httptest.NewRequest("GET", "/", nil)
+	v6a.RemoteAddr = "[2001:db8:1:2:aaaa::1]:5000"
+	v6b := httptest.NewRequest("GET", "/", nil)
+	v6b.RemoteAddr = "[2001:db8:1:2:bbbb::9]:5000"
+	if ClientKey(v6a, false) != ClientKey(v6b, false) || ClientKey(v6a, false) != "2001:db8:1:2::/64" {
+		t.Fatalf("ipv6 /64 bucketing: %s %s", ClientKey(v6a, false), ClientKey(v6b, false))
+	}
+	bad := httptest.NewRequest("GET", "/", nil)
+	bad.RemoteAddr = "garbage"
+	if ClientKey(bad, false) != "garbage" {
+		t.Fatal("unparsable remote addr")
 	}
 }

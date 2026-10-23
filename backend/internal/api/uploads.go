@@ -18,7 +18,10 @@ var imageTypes = map[string]string{
 }
 
 // upload принимает изображение (multipart, поле file). Тип определяется по содержимому, а не по имени.
-func (s *Server) upload(w http.ResponseWriter, r *http.Request, _ httpx.User) error {
+func (s *Server) upload(w http.ResponseWriter, r *http.Request, u httpx.User) error {
+	if !s.uploadLimiter.Allow("upload:" + u.ID) {
+		return httpx.TooMany()
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, s.Config.MaxUploadBytes+1024)
 	file, _, err := r.FormFile("file")
 	if err != nil {

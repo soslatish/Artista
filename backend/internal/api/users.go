@@ -122,7 +122,7 @@ func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	return s.withTx(r.Context(), func(tx pgx.Tx) error {
+	err := s.withTx(r.Context(), func(tx pgx.Tx) error {
 		var hash string
 		if err := tx.QueryRow(r.Context(), `SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, u.ID).Scan(&hash); err != nil {
 			if isNoRows(err) {
@@ -155,9 +155,14 @@ func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request, u httpx.User) 
 				return fmt.Errorf("delete account: %w", err)
 			}
 		}
-		httpx.NoContent(w)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.revokeAccess(u.ID)
+	httpx.NoContent(w) // только после успешного коммита
+	return nil
 }
 
 func (s *Server) becomeArtist(w http.ResponseWriter, r *http.Request, u httpx.User) error {
@@ -166,10 +171,14 @@ func (s *Server) becomeArtist(w http.ResponseWriter, r *http.Request, u httpx.Us
 	}
 	var resp authResponse
 	err := s.withTx(r.Context(), func(tx pgx.Tx) error {
-		if _, err := tx.Exec(r.Context(), `UPDATE users SET role = 'artist', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`, u.ID); err != nil {
+		tag, err := tx.Exec(r.Context(), `UPDATE users SET role = 'artist', updated_at = now()
+			WHERE id = $1 AND deleted_at IS NULL AND banned_at IS NULL`, u.ID)
+		if err != nil {
 			return err
 		}
-		var err error
+		if tag.RowsAffected() == 0 {
+			return httpx.Unauthorized("Аккаунт недоступен")
+		}
 		if resp.Tokens, err = s.issueTokens(r.Context(), tx, u.ID, "artist"); err != nil {
 			return err
 		}
@@ -285,9 +294,9 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 			(SELECT count(*) FROM reviews WHERE artist_id = u.id),
 			(SELECT count(*) FROM follows WHERE artist_id = u.id),
 			(SELECT count(*) FROM artworks WHERE artist_id = u.id AND status IN ('published','reserved')),
-			EXISTS(SELECT 1 FROM follows WHERE artist_id = u.id AND follower_id::text = $2),
+			EXISTS(SELECT 1 FROM follows WHERE artist_id = u.id AND follower_id = $2::uuid),
 			u.created_at
-		FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL`, id, viewer.ID).
+		FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL`, id, nullableID(viewer.ID)).
 		Scan(&d.ID, &d.Name, &d.Role, &d.City, &d.Bio, &d.AvatarURL, &d.Social, &d.IsPremium, &d.Rating,
 			&d.ReviewsCount, &d.Followers, &d.ArtworkCount, &d.IsFollowing, &d.CreatedAt)
 	if isNoRows(err) {

@@ -28,6 +28,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET (не короче 32 символов)}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
       PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-stub}
+      # тестовые платежи — только по явному разрешению (в APP_ENV=prod запрещены всегда)
+      ALLOW_STUB_PAYMENTS: ${ALLOW_STUB_PAYMENTS:-false}
+      TRUST_PROXY_HEADERS: "true"
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     volumes:
       - uploads:/data/uploads
