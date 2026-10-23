@@ -1,6 +1,7 @@
 ﻿# Локальный запуск Artista на Windows: база + API (Docker) и мобильное приложение (Expo).
 # Запуск из корня репозитория:  powershell -ExecutionPolicy Bypass -File .\start.ps1
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
 $root = $PSScriptRoot
 Set-Location $root
 
@@ -9,8 +10,15 @@ function Need($cmd, $hint) {
 }
 Need docker 'Установите и запустите Docker Desktop.'
 Need npm 'Установите Node.js 20+ (https://nodejs.org).'
-docker info *> $null
-if ($LASTEXITCODE -ne 0) { Write-Host 'Docker Desktop не запущен — откройте его и повторите.' -ForegroundColor Red; exit 1 }
+# docker пишет ошибку в stderr — при ErrorActionPreference=Stop это прервало бы скрипт без понятного сообщения
+$prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+docker info 2>&1 | Out-Null
+$dockerOk = $LASTEXITCODE -eq 0
+$ErrorActionPreference = $prev
+if (-not $dockerOk) {
+  Write-Host 'Docker Desktop не запущен. Откройте его, дождитесь статуса «Engine running» и запустите скрипт снова.' -ForegroundColor Red
+  exit 1
+}
 
 # IP компьютера в локальной сети — по нему телефон с Expo Go достучится до API
 $ip = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up' } |
@@ -41,8 +49,9 @@ if ($firstRun) {
 
 $compose = @('compose', '-f', 'infra\docker-compose.yml', '--env-file', $envFile)
 Write-Host 'Собираю и запускаю базу и API (первый раз — несколько минут)...' -ForegroundColor Cyan
+$ErrorActionPreference = 'Continue'  # docker compose выводит прогресс в stderr
 & docker @compose up -d --build
-if ($LASTEXITCODE -ne 0) { exit 1 }
+if ($LASTEXITCODE -ne 0) { Write-Host 'Не удалось запустить контейнеры — см. вывод выше.' -ForegroundColor Red; exit 1 }
 
 Write-Host 'Жду готовности API...' -NoNewline
 for ($i = 0; $i -lt 60; $i++) {
