@@ -236,7 +236,7 @@ func (s *Server) updateArtwork(w http.ResponseWriter, r *http.Request, u httpx.U
 		if err != nil {
 			return err
 		}
-		if status != "draft" && status != "published" {
+		if status != "draft" && status != "published" && status != "archived" {
 			return httpx.Conflict("artwork_locked", "Работу нельзя изменить в текущем статусе")
 		}
 		next := cur
