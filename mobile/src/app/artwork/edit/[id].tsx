@@ -4,6 +4,7 @@ import { errorText } from '@/api/client';
 import { useArtwork } from '@/api/hooks';
 import type { Artwork } from '@/api/types';
 import { ArtworkFormScreen } from '@/features/artwork-form';
+import { useT } from '@/i18n';
 import { validId } from '@/lib/guard';
 import type { ArtworkForm } from '@/lib/validation';
 import { ErrorState, Loading } from '@/ui/primitives';
@@ -23,14 +24,18 @@ function toForm(a: Artwork): ArtworkForm {
     year: a.year ? String(a.year) : '',
     price: String(Math.round(a.price_kop / 100)),
     images: a.images,
+    rooms: a.rooms,
+    allowOffers: a.allow_offers,
+    seriesId: a.series_id ?? '',
   };
 }
 
 export default function EditArtworkScreen() {
   const id = validId(useLocalSearchParams().id);
+  const t = useT();
   const q = useArtwork(id ?? '');
-  if (!id) return <ErrorState text="Ссылка повреждена." />;
+  if (!id) return <ErrorState text={t('Ссылка повреждена.')} />;
   if (q.isLoading) return <Loading />;
   if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
-  return <ArtworkFormScreen artworkId={id} initial={toForm(q.data)} isPublished={q.data.status === 'published'} />;
+  return <ArtworkFormScreen artworkId={id} initial={toForm(q.data)} isPublished={q.data.status === 'published' || q.data.status === 'scheduled'} />;
 }

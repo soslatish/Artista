@@ -1,12 +1,13 @@
 // Тестовая оплата: пока платёжный провайдер не подключён, деньги не списываются.
 import { useState } from 'react';
-import { Modal, StyleSheet, View } from 'react-native';
+import { Modal, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
 import type { Payment } from '@/api/types';
+import { useT } from '@/i18n';
 import { formatPrice } from '@/lib/format';
 import { Button, Notice, T } from '@/ui/primitives';
-import { colors, radius, space } from '@/ui/theme';
+import { makeStyles, radius, space } from '@/ui/theme';
 
 interface Props {
   payment: Payment | null;
@@ -16,6 +17,8 @@ interface Props {
 }
 
 export function TestPaymentSheet({ payment, purpose, onPaid, onCancel }: Props) {
+  const t = useT();
+  const styles = useStyles();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pay = async () => {
@@ -35,20 +38,20 @@ export function TestPaymentSheet({ payment, purpose, onPaid, onCancel }: Props) 
     <Modal visible={!!payment} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <T variant="title">Оплата</T>
+          <T variant="title">{t('Оплата')}</T>
           <T variant="body">{purpose}</T>
           <T variant="priceLarge">{payment ? formatPrice(payment.amount_kop) : ''}</T>
-          <Notice text="Тестовый режим: платёжная система ещё не подключена, деньги не списываются." />
+          <Notice text={t('Тестовый режим: платёжная система ещё не подключена, деньги не списываются.')} />
           {error ? <Notice tone="danger" text={error} /> : null}
-          <Button title="Оплатить (тест)" loading={busy} onPress={pay} />
-          <Button title="Отмена" variant="ghost" onPress={onCancel} />
+          <Button title={t('Оплатить (тест)')} loading={busy} onPress={pay} />
+          <Button title={t('Отмена')} variant="ghost" onPress={onCancel} />
         </View>
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(30,26,27,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.wall, padding: space.xl, paddingBottom: space.xxl, gap: space.md, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet },
-});
+const useStyles = makeStyles((c) => ({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: c.wall, padding: space.xl, paddingBottom: space.xxl, gap: space.md, borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet },
+}));

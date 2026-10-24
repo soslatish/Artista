@@ -11,7 +11,7 @@ import { useSession } from '@/auth/session';
 const RECONNECT_MS = [1000, 3000, 10000, 30000];
 
 interface ServerEvent {
-  type: 'message' | 'read' | 'notification';
+  type: 'message' | 'read' | 'notification' | 'auction_bid';
   data: unknown;
 }
 
@@ -59,6 +59,10 @@ export function RealtimeBridge() {
           const id = (ev.data as { conversation_id?: string }).conversation_id;
           if (id) qc.invalidateQueries({ queryKey: keys.messages(id) });
           qc.invalidateQueries({ queryKey: keys.conversations });
+        } else if (ev.type === 'auction_bid') {
+          const d = ev.data as { auction_id?: string; artwork_id?: string };
+          if (d.auction_id) qc.invalidateQueries({ queryKey: keys.auction(d.auction_id) });
+          if (d.artwork_id) qc.invalidateQueries({ queryKey: keys.artwork(d.artwork_id) });
         } else if (ev.type === 'notification') {
           qc.invalidateQueries({ queryKey: keys.notifications });
           qc.invalidateQueries({ queryKey: ['orders'] });

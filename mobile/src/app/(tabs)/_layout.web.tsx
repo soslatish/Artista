@@ -6,7 +6,8 @@ import type { ComponentProps } from 'react';
 import { flatten, useConversations } from '@/api/hooks';
 import { useSession } from '@/auth/session';
 import { useTabsBootstrap } from '@/features/welcome';
-import { colors, fonts } from '@/ui/theme';
+import { useT } from '@/i18n';
+import { fonts, useTheme } from '@/ui/theme';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -20,6 +21,8 @@ const tabs: { name: string; title: string; icon: IconName; active: IconName }[] 
 
 export default function WebTabsLayout() {
   const { user } = useSession();
+  const tr = useT();
+  const { colors } = useTheme();
   useTabsBootstrap();
   const conversations = useConversations(!!user);
   const unread = flatten(conversations.data).reduce((sum, c) => sum + c.unread, 0);
@@ -37,7 +40,7 @@ export default function WebTabsLayout() {
           key={t.name}
           name={t.name}
           options={{
-            title: t.title,
+            title: tr(t.title),
             tabBarBadge: t.name === 'messages' && unread > 0 ? unread : undefined,
             tabBarIcon: ({ color, focused, size }) => <Ionicons name={focused ? t.active : t.icon} color={String(color)} size={size} />,
           }}

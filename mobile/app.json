@@ -6,13 +6,18 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "artista",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.aleksandr.artista",
       "buildNumber": "1",
       "supportsTablet": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleLocalizations": [
+          "ru",
+          "en"
+        ],
+        "CFBundleDevelopmentRegion": "ru"
       }
     },
     "android": {
@@ -44,8 +49,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Artista использует фото, чтобы вы могли добавить снимки своих работ.",
-          "cameraPermission": "Artista использует камеру, чтобы вы могли сфотографировать работу."
+          "photosPermission": "Artista использует фото, чтобы вы могли добавить снимки работ, примерить картину на свою стену или отправить референс художнику.",
+          "cameraPermission": "Artista использует камеру, чтобы вы могли сфотографировать работу или стену для примерки."
         }
       ],
       [
@@ -54,7 +59,8 @@
           "color": "#622D32"
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

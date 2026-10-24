@@ -484,7 +484,7 @@ func (s *Server) appleAppSiteAssociation(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"applinks": map[string]any{"details": []map[string]any{{
 			"appIDs":     []string{s.Config.AppleTeamID + "." + appPackage},
-			"components": []map[string]string{{"/": "/a/*"}, {"/": "/u/*"}, {"/": "/e/*"}, {"/": "/c/*"}},
+			"components": []map[string]string{{"/": "/a/*"}, {"/": "/u/*"}, {"/": "/e/*"}, {"/": "/c/*"}, {"/": "/collections/*"}},
 		}}},
 	})
 }

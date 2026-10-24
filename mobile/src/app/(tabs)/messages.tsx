@@ -7,12 +7,16 @@ import { errorText } from '@/api/client';
 import { flatten, useConversations } from '@/api/hooks';
 import type { Conversation } from '@/api/types';
 import { useSession } from '@/auth/session';
+import { useT } from '@/i18n';
 import { formatMessageTime } from '@/lib/format';
 import { Avatar, Button, EmptyState, ErrorState, Loading, T } from '@/ui/primitives';
-import { colors, radius, space } from '@/ui/theme';
+import { makeStyles, radius, space, useColors } from '@/ui/theme';
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   const { user } = useSession();
   const q = useConversations(!!user);
 
@@ -21,9 +25,9 @@ export default function MessagesScreen() {
       <View style={[styles.root, { paddingTop: insets.top }]}>
         <EmptyState
           icon="chatbubbles-outline"
-          title="Переписка с художниками"
-          text="Войдите, чтобы задать вопрос о работе или договориться о деталях."
-          action={<Button title="Войти" onPress={() => router.push('/login')} />}
+          title={t('Переписка с художниками')}
+          text={t('Войдите, чтобы задать вопрос о работе или договориться о деталях.')}
+          action={<Button title={t('Войти')} onPress={() => router.push('/login')} />}
         />
       </View>
     );
@@ -32,7 +36,7 @@ export default function MessagesScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <T variant="display" style={styles.title}>
-        Сообщения
+        {t('Сообщения')}
       </T>
       {q.isLoading ? (
         <Loading />
@@ -46,7 +50,7 @@ export default function MessagesScreen() {
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} tintColor={colors.bordeaux} />}
           onEndReached={() => q.hasNextPage && q.fetchNextPage()}
-          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title="Сообщений пока нет" text="Напишите художнику со страницы работы." />}
+          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title={t('Сообщений пока нет')} text={t('Напишите художнику со страницы работы.')} />}
         />
       )}
     </View>
@@ -54,12 +58,16 @@ export default function MessagesScreen() {
 }
 
 function Row({ c, myId }: { c: Conversation; myId: string }) {
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   const last = c.last_message;
   const mine = last?.sender_id === myId;
+  const preview = last ? last.body || (last.image_url ? t('Фото') : '') : '';
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Диалог с ${c.other.name}${c.unread ? `, непрочитанных ${c.unread}` : ''}`}
+      accessibilityLabel={c.unread ? t('Диалог с {name}, непрочитанных {n}', { name: c.other.name, n: c.unread }) : t('Диалог с {name}', { name: c.other.name })}
       onPress={() => router.push({ pathname: '/chat/[id]', params: { id: c.id, name: c.other.name } })}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Avatar uri={c.other.avatar_url} name={c.other.name} size={48} />
@@ -77,8 +85,8 @@ function Row({ c, myId }: { c: Conversation; myId: string }) {
         ) : null}
         <View style={styles.rowTop}>
           <T variant="small" numberOfLines={1} style={styles.flex} color={c.unread ? colors.ink : colors.graphite}>
-            {mine ? 'Вы: ' : ''}
-            {last?.body ?? ''}
+            {mine ? t('Вы: ') : ''}
+            {preview}
           </T>
           {c.unread ? (
             <View style={styles.unread}>
@@ -94,15 +102,15 @@ function Row({ c, myId }: { c: Conversation; myId: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.wall },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.wall },
   title: { paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.md },
   row: { flexDirection: 'row', gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, alignItems: 'center' },
-  pressed: { backgroundColor: colors.plaster },
+  pressed: { backgroundColor: c.plaster },
   rowBody: { flex: 1, gap: 2 },
   rowTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
-  unread: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: colors.bordeaux, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  unread: { minWidth: 22, height: 22, borderRadius: 11, backgroundColor: c.bordeaux, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   thumb: { width: 44, height: 56, borderRadius: radius.art },
-  sep: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 76 },
-});
+  sep: { height: StyleSheet.hairlineWidth, backgroundColor: c.hairline, marginLeft: 76 },
+}));

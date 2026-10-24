@@ -1,24 +1,30 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { errorText } from '@/api/client';
 import { flatten, useMyArtworks } from '@/api/hooks';
 import { useSession } from '@/auth/session';
+import { useT } from '@/i18n';
 import { Gallery } from '@/ui/artwork';
 import { Button, Chip, EmptyState, ErrorState } from '@/ui/primitives';
-import { colors, space } from '@/ui/theme';
+import { makeStyles, space } from '@/ui/theme';
 
 const filters: { key?: string; label: string }[] = [
   { label: 'Все' },
   { key: 'published', label: 'В продаже' },
   { key: 'draft', label: 'Черновики' },
+  { key: 'scheduled', label: 'На выставке' },
+  { key: 'auction', label: 'На аукционе' },
   { key: 'reserved', label: 'В заказе' },
   { key: 'sold', label: 'Проданы' },
+  { key: 'commission', label: 'На заказ' },
   { key: 'archived', label: 'Архив' },
 ];
 
 export default function MyArtworksScreen() {
+  const t = useT();
+  const styles = useStyles();
   const { user } = useSession();
   const [status, setStatus] = useState<string | undefined>();
   const q = useMyArtworks(status, user?.role === 'artist');
@@ -26,7 +32,7 @@ export default function MyArtworksScreen() {
   const header = (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
       {filters.map((f) => (
-        <Chip key={f.label} label={f.label} selected={status === f.key} onPress={() => setStatus(f.key)} />
+        <Chip key={f.label} label={t(f.label)} selected={status === f.key} onPress={() => setStatus(f.key)} />
       ))}
     </ScrollView>
   );
@@ -48,9 +54,9 @@ export default function MyArtworksScreen() {
           empty={
             <EmptyState
               icon="brush-outline"
-              title={status ? 'Здесь пусто' : 'Добавьте первую работу'}
-              text="Публикация бесплатна. Хорошие фото при дневном свете продают лучше всего."
-              action={<Button title="Добавить работу" onPress={() => router.push('/artwork/new')} />}
+              title={status ? t('Здесь пусто') : t('Добавьте первую работу')}
+              text={t('Публикация бесплатна. Хорошие фото при дневном свете продают лучше всего.')}
+              action={<Button title={t('Добавить работу')} onPress={() => router.push('/artwork/new')} />}
             />
           }
         />
@@ -59,7 +65,7 @@ export default function MyArtworksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.wall },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.wall },
   filters: { gap: space.sm, paddingHorizontal: space.sm, paddingVertical: space.md },
-});
+}));

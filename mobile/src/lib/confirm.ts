@@ -1,14 +1,16 @@
 // Подтверждение действия: системный Alert на устройстве, window.confirm в веб-превью.
 import { Alert, Platform } from 'react-native';
 
+import { t } from '@/i18n';
+
 export function confirmAction(title: string, message: string, onConfirm: () => void, opts: { confirmText?: string; destructive?: boolean } = {}): void {
   if (Platform.OS === 'web') {
     if (globalThis.confirm?.(`${title}\n\n${message}`)) onConfirm();
     return;
   }
   Alert.alert(title, message, [
-    { text: 'Отмена', style: 'cancel' },
-    { text: opts.confirmText ?? 'Да', style: opts.destructive ? 'destructive' : 'default', onPress: onConfirm },
+    { text: t('Отмена'), style: 'cancel' },
+    { text: opts.confirmText ?? t('Да'), style: opts.destructive ? 'destructive' : 'default', onPress: onConfirm },
   ]);
 }
 
@@ -24,7 +26,7 @@ export function chooseAction(title: string, message: string, choices: Choice[]):
     if (first && globalThis.confirm?.(`${title}\n\n${first.label}?`)) first.onPress();
     return;
   }
-  Alert.alert(title, message, [{ text: 'Отмена', style: 'cancel' }, ...choices.map((c) => ({ text: c.label, onPress: c.onPress }))]);
+  Alert.alert(title, message, [{ text: t('Отмена'), style: 'cancel' }, ...choices.map((c) => ({ text: c.label, onPress: c.onPress }))]);
 }
 
 export function notify(title: string, message?: string): void {

@@ -20,3 +20,4 @@ mobile/android/
 !.env.example
 .DS_Store
 infra/.seeded
+mobile/coverage/

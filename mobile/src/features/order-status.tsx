@@ -1,13 +1,14 @@
 // Статусы заказа: подписи и шкала этапов сделки.
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { Order, OrderStatus } from '@/api/types';
+import { type TFunc, useT } from '@/i18n';
 import { formatDate } from '@/lib/format';
 import { T } from '@/ui/primitives';
-import { colors, space } from '@/ui/theme';
+import { makeStyles, type Palette, space, useColors } from '@/ui/theme';
 
-export const orderStatusLabel: Record<OrderStatus, string> = {
+const labels: Record<OrderStatus, string> = {
   awaiting_payment: 'Ожидает оплаты',
   paid: 'Оплачен, ждёт подтверждения',
   confirmed: 'Готовится к отправке',
@@ -16,10 +17,14 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
   cancelled: 'Отменён',
 };
 
-export function statusTone(s: OrderStatus): string {
-  if (s === 'completed') return colors.success;
-  if (s === 'cancelled') return colors.danger;
-  return colors.bordeaux;
+export function orderStatusLabel(s: OrderStatus, t: TFunc): string {
+  return t(labels[s]);
+}
+
+export function statusTone(s: OrderStatus, c: Palette): string {
+  if (s === 'completed') return c.success;
+  if (s === 'cancelled') return c.danger;
+  return c.bordeaux;
 }
 
 const steps: { status: OrderStatus; title: string; at: keyof Order }[] = [
@@ -33,10 +38,13 @@ const order: OrderStatus[] = ['awaiting_payment', 'paid', 'confirmed', 'shipped'
 
 /** Шкала этапов — это действительно последовательность, поэтому шаги пронумерованы. */
 export function StatusTimeline({ o }: { o: Order }) {
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   if (o.status === 'cancelled') return null;
   const reached = order.indexOf(o.status);
   return (
-    <View style={styles.timeline} accessibilityLabel={`Статус заказа: ${orderStatusLabel[o.status]}`}>
+    <View style={styles.timeline} accessibilityLabel={t('Статус заказа: {s}', { s: orderStatusLabel(o.status, t) })}>
       {steps.map((s, i) => {
         const done = order.indexOf(s.status) <= reached;
         const at = o[s.at] as string | null;
@@ -44,13 +52,19 @@ export function StatusTimeline({ o }: { o: Order }) {
           <View key={s.status} style={styles.step}>
             <View style={styles.rail}>
               <View style={[styles.node, done && styles.nodeDone]}>
-                {done ? <Ionicons name="checkmark" size={14} color={colors.onDark} /> : <T variant="smallStrong" color={colors.graphite}>{i + 1}</T>}
+                {done ? (
+                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                ) : (
+                  <T variant="smallStrong" color={colors.graphite}>
+                    {i + 1}
+                  </T>
+                )}
               </View>
               {i < steps.length - 1 ? <View style={[styles.line, done && order.indexOf(steps[i + 1].status) <= reached && styles.lineDone]} /> : null}
             </View>
             <View style={styles.stepText}>
               <T variant={done ? 'bodyStrong' : 'body'} color={done ? colors.ink : colors.graphite}>
-                {s.title}
+                {t(s.title)}
               </T>
               {at ? <T variant="small">{formatDate(at)}</T> : null}
             </View>
@@ -61,13 +75,13 @@ export function StatusTimeline({ o }: { o: Order }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   timeline: { gap: 0 },
   step: { flexDirection: 'row', gap: space.md, minHeight: 52 },
   rail: { alignItems: 'center', width: 26 },
-  node: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: colors.hairline, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
-  nodeDone: { backgroundColor: colors.bordeaux, borderColor: colors.bordeaux },
-  line: { flex: 1, width: 2, backgroundColor: colors.hairline, marginVertical: 2 },
-  lineDone: { backgroundColor: colors.bordeaux },
+  node: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: c.hairline, alignItems: 'center', justifyContent: 'center', backgroundColor: c.paper },
+  nodeDone: { backgroundColor: c.bordeaux, borderColor: c.bordeaux },
+  line: { flex: 1, width: 2, backgroundColor: c.hairline, marginVertical: 2 },
+  lineDone: { backgroundColor: c.bordeaux },
   stepText: { flex: 1, paddingTop: 2, gap: 2 },
-});
+}));

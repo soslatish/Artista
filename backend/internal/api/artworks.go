@@ -60,9 +60,11 @@ type artworkDTO struct {
 	ExhibitionID   *string       `json:"exhibition_id"`
 	IsPromoted     bool          `json:"is_promoted"`
 	Auction        *auctionBrief `json:"auction"`
-	Artist         artistBrief   `json:"artist"`
-	PublishedAt    *time.Time    `json:"published_at"`
-	CreatedAt      time.Time     `json:"created_at"`
+	// MyPriceKop — цена для этого зрителя из брони (принятое предложение, выигранный аукцион)
+	MyPriceKop  *int64      `json:"my_price_kop"`
+	Artist      artistBrief `json:"artist"`
+	PublishedAt *time.Time  `json:"published_at"`
+	CreatedAt   time.Time   `json:"created_at"`
 }
 
 // artworkSelect — общий SELECT; $1 — id зрителя (может быть NULL).
@@ -74,6 +76,8 @@ const artworkSelect = `SELECT a.id, a.title, a.description, a.category, a.style,
 	a.palette, a.rooms, a.allow_offers, a.series_id, a.exhibition_id,
 	EXISTS(SELECT 1 FROM promotions p WHERE p.artwork_id = a.id AND p.status = 'active' AND p.ends_at > now()) AS is_promoted,
 	au.id, au.start_kop, au.step_kop, au.current_kop, au.bids_count, au.ends_at,
+	(SELECT pl.price_kop FROM price_locks pl WHERE pl.artwork_id = a.id AND pl.user_id = $1::uuid
+		AND pl.used_at IS NULL AND pl.released_at IS NULL AND pl.expires_at > now() ORDER BY pl.created_at DESC LIMIT 1),
 	u.id, u.name, u.avatar_url, u.city, coalesce(u.premium_until > now(), false),
 	coalesce(u.vacation_until > now(), false), u.vacation_until,
 	a.published_at, a.created_at
@@ -92,6 +96,7 @@ func scanArtwork(row pgx.Row) (artworkDTO, error) {
 		&a.FavoritesCount, &a.IsFavorite, &a.Images,
 		&a.Palette, &a.Rooms, &a.AllowOffers, &a.SeriesID, &a.ExhibitionID, &a.IsPromoted,
 		&auID, &auStart, &auStep, &au.CurrentKop, &auBids, &auEnds,
+		&a.MyPriceKop,
 		&a.Artist.ID, &a.Artist.Name, &a.Artist.AvatarURL, &a.Artist.City, &a.Artist.IsPremium,
 		&a.Artist.OnVacation, &a.Artist.VacationUntil,
 		&a.PublishedAt, &a.CreatedAt)

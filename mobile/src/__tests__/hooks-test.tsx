@@ -4,6 +4,7 @@ import { Alert, Platform } from 'react-native';
 import type { ReactNode } from 'react';
 
 import { configureTokens, setFetch } from '@/api/client';
+import * as hooks from '@/api/hooks';
 import {
   flatten,
   keys,
@@ -51,7 +52,7 @@ beforeEach(() => {
 });
 
 function setup() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   return { qc, wrapper };
 }
@@ -154,7 +155,7 @@ test('save artwork creates, then patches and publishes a draft', async () => {
     return { status: 200, body: { data: {} } };
   };
   const { wrapper } = setup();
-  const input = { title: 'T', description: '', category: 'painting', style: '', technique: '', materials: '', width_cm: 1, height_cm: 1, depth_cm: 0, year: null, price_kop: 300000, images: [] };
+  const input = { title: 'T', description: '', category: 'painting', style: '', technique: '', materials: '', width_cm: 1, height_cm: 1, depth_cm: 0, year: null, price_kop: 300000, images: [], rooms: [], allow_offers: false, series_id: null };
   const create = await renderHook(() => useSaveArtwork(), { wrapper });
   await act(async () => {
     await create.result.current.mutateAsync({ input, publish: false });
@@ -241,4 +242,52 @@ describe('confirm helpers on native', () => {
     expect(g.alert).toHaveBeenCalledWith('Готово\n\nТекст');
     Object.defineProperty(Platform, 'OS', { value: original, configurable: true });
   });
+});
+
+test('discovery and deal hooks hit their endpoints', async () => {
+  handler = (_m, path) => {
+    if (path.startsWith('/collections/')) return { status: 200, body: { data: [art('c1')], meta: { next_cursor: null, collection: { slug: 'x', title: 'Подборка' } } } };
+    if (path.includes('?') || /\/(history|offers|commissions|posts|exhibitions\/e1)$/.test(path.split('?')[0])) return { status: 200, body: { data: [], meta: { next_cursor: null } } };
+    return { status: 200, body: { data: [] } };
+  };
+  const { wrapper } = setup();
+  const run = async <R extends { isSuccess: boolean }>(fn: () => R) => {
+    const r = await renderHook(fn, { wrapper });
+    await waitFor(() => expect(r.result.current.isSuccess).toBe(true));
+    return r;
+  };
+  await run(() => hooks.useSimilar('a1'));
+  await run(() => hooks.useQuestions('a1'));
+  await run(() => hooks.useHistory(true));
+  await run(() => hooks.useSavedSearches(true));
+  await run(() => hooks.useCollections());
+  const coll = await run(() => hooks.useCollection('x'));
+  expect(hooks.pageMeta<{ title: string }>(coll.result.current.data, 'collection')?.title).toBe('Подборка');
+  await run(() => hooks.useOffers('buyer'));
+  await run(() => hooks.useOffer('o1'));
+  await run(() => hooks.useAuction('au1'));
+  await run(() => hooks.useCommissions('artist'));
+  await run(() => hooks.useCommission('c1'));
+  await run(() => hooks.usePromotions(true));
+  await run(() => hooks.usePostsFeed());
+  await run(() => hooks.useUserPosts('u1'));
+  await run(() => hooks.useUserSeries('u1'));
+  await run(() => hooks.useExhibitions({ status: 'upcoming' }));
+  await run(() => hooks.useExhibition('e1'));
+  await run(() => hooks.useCertificates(true));
+  await run(() => hooks.useCertificate('ART-AAAA-BBBB'));
+  await run(() => hooks.useDetailedStats(30, true));
+  expect(calls).toEqual(
+    expect.arrayContaining([
+      'GET /artworks/a1/similar',
+      'GET /me/history',
+      'GET /collections/x',
+      'GET /offers?role=buyer',
+      'GET /auctions/au1',
+      'GET /commissions?role=artist',
+      'GET /exhibitions?status=upcoming',
+      'GET /me/stats/detailed?days=30',
+      'GET /certificates/ART-AAAA-BBBB',
+    ]),
+  );
 });

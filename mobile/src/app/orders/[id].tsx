@@ -1,24 +1,29 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
 import { useOrder, useOrderAction } from '@/api/hooks';
 import type { Conversation, Order, Payment } from '@/api/types';
+import { uploadImage } from '@/api/upload';
 import { orderStatusLabel, StatusTimeline, statusTone } from '@/features/order-status';
+import { pickPhotos } from '@/features/pick-photos';
 import { TestPaymentSheet } from '@/features/test-payment';
-import { formatDate, formatPrice, formatTimeLeft } from '@/lib/format';
+import { type TFunc, useT } from '@/i18n';
 import { confirmAction } from '@/lib/confirm';
+import { formatDate, formatPrice, formatTimeLeft } from '@/lib/format';
 import { validId } from '@/lib/guard';
-import { Button, Divider, ErrorState, Field, Loading, Notice, T } from '@/ui/primitives';
-import { colors, radius, space } from '@/ui/theme';
+import { Button, Divider, ErrorState, Field, Line, Loading, Notice, T } from '@/ui/primitives';
+import { makeStyles, radius, space, useColors } from '@/ui/theme';
 
 const methodNames = { cdek: 'СДЭК', express: 'Курьер за 2–4 часа', post: 'Почта России' } as const;
 
 export default function OrderRoute() {
   const id = validId(useLocalSearchParams().id);
-  if (!id) return <ErrorState text="Ссылка повреждена." />;
+  const t = useT();
+  if (!id) return <ErrorState text={t('Ссылка повреждена.')} />;
   return <OrderScreen id={id} />;
 }
 
@@ -30,18 +35,21 @@ function OrderScreen({ id }: { id: string }) {
 }
 
 function OrderView({ o, refetch }: { o: Order; refetch: () => void }) {
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   const action = useOrderAction(o.id);
   const [tracking, setTracking] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [payment, setPayment] = useState<Payment | null>(null);
   const isArtist = o.my_role === 'artist';
   const other = isArtist ? o.buyer : o.artist;
 
-  const run = (name: string, body?: object) =>
-    action.mutate({ action: name, body }, { onError: (e) => setError(errorText(e)), onSuccess: () => setError('') });
+  const run = (name: string, body?: object) => action.mutate({ action: name, body }, { onError: (e) => setError(errorText(e)), onSuccess: () => setError('') });
 
-  const confirmRun = (title: string, text: string, name: string, destructive = false) =>
-    confirmAction(title, text, () => run(name), { destructive });
+  const confirmRun = (title: string, text: string, name: string, destructive = false) => confirmAction(title, text, () => run(name), { destructive });
 
   const pay = async () => {
     try {
@@ -53,28 +61,46 @@ function OrderView({ o, refetch }: { o: Order; refetch: () => void }) {
 
   const chat = async () => {
     try {
-      const c = await post<Conversation>('/conversations', { user_id: other.id, artwork_id: o.artwork.id });
+      const c = await post<Conversation>('/conversations', { user_id: other.id, artwork_id: o.kind === 'commission' ? undefined : o.artwork.id });
       router.push({ pathname: '/chat/[id]', params: { id: c.id, name: other.name } });
     } catch (e) {
       setError(errorText(e));
     }
   };
 
+  const addResultPhoto = async () => {
+    const [asset] = await pickPhotos('library', 1);
+    if (!asset) return;
+    setUploading(true);
+    try {
+      const url = await uploadImage(asset);
+      setPhotos((p) => [...p, url].slice(0, 10));
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const deadlineText = o.deadline_at ? formatTimeLeft(o.deadline_at) : '';
-  const hint = hintFor(o, deadlineText);
+  const hint = hintFor(o, deadlineText, t);
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/artwork/[id]', params: { id: o.artwork.id } })} style={styles.item}>
-          {o.artwork.image_url ? <Image source={{ uri: o.artwork.image_url }} style={styles.thumb} contentFit="cover" /> : null}
+        <Pressable
+          accessibilityRole="button"
+          disabled={o.kind === 'commission'}
+          onPress={() => router.push({ pathname: '/artwork/[id]', params: { id: o.artwork.id } })}
+          style={styles.item}>
+          {o.artwork.image_url ? <Image source={{ uri: o.artwork.image_url }} style={styles.thumb} contentFit="cover" /> : <View style={styles.thumb} />}
           <View style={styles.flex}>
             <T variant="artTitle">{o.artwork.title}</T>
             <T variant="small">
-              {isArtist ? 'Покупатель' : 'Художник'}: {other.name}
+              {isArtist ? t('Покупатель') : t('Художник')}: {other.name}
             </T>
-            <T variant="smallStrong" color={statusTone(o.status)}>
-              {orderStatusLabel[o.status]}
+            <T variant="smallStrong" color={statusTone(o.status, colors)}>
+              {orderStatusLabel(o.status, t)}
             </T>
           </View>
         </Pressable>
@@ -86,59 +112,87 @@ function OrderView({ o, refetch }: { o: Order; refetch: () => void }) {
         {/* действия по роли и статусу */}
         {!isArtist && o.status === 'awaiting_payment' ? (
           <>
-            <Button title={`Оплатить ${formatPrice(o.total_kop)}`} onPress={pay} />
-            <Button title="Отменить заказ" variant="ghost" onPress={() => confirmRun('Отменить заказ?', 'Работа снова станет доступна другим.', 'cancel', true)} />
+            <Button title={t('Оплатить {sum}', { sum: formatPrice(o.total_kop) })} onPress={pay} />
+            <Button title={t('Отменить заказ')} variant="ghost" onPress={() => confirmRun(t('Отменить заказ?'), t('Работа снова станет доступна другим.'), 'cancel', true)} />
           </>
         ) : null}
         {!isArtist && o.status === 'paid' ? (
-          <Button title="Отменить и вернуть деньги" variant="danger" onPress={() => confirmRun('Отменить заказ?', 'Деньги вернутся на карту.', 'cancel', true)} />
+          <Button title={t('Отменить и вернуть деньги')} variant="danger" onPress={() => confirmRun(t('Отменить заказ?'), t('Деньги вернутся на карту.'), 'cancel', true)} />
         ) : null}
         {!isArtist && o.status === 'shipped' ? (
-          <Button title="Я получил работу" loading={action.isPending} onPress={() => confirmRun('Подтвердить получение?', 'Проверьте работу: после подтверждения деньги уйдут художнику.', 'complete')} />
+          <Button
+            title={t('Я получил работу')}
+            loading={action.isPending}
+            onPress={() => confirmRun(t('Подтвердить получение?'), t('Проверьте работу: после подтверждения деньги уйдут художнику.'), 'complete')}
+          />
+        ) : null}
+        {!isArtist && o.status === 'completed' ? (
+          <Button title={t('Сертификат подлинности')} variant="secondary" icon="ribbon-outline" onPress={() => router.push('/certificates')} />
         ) : null}
         {isArtist && o.status === 'paid' ? (
           <>
-            <Button title="Подтвердить заказ" loading={action.isPending} onPress={() => run('confirm')} />
-            <Button title="Отказаться" variant="danger" onPress={() => confirmRun('Отказаться от заказа?', 'Покупателю вернутся деньги, работа снова будет в продаже.', 'decline', true)} />
+            <Button title={o.kind === 'commission' ? t('Начать работу') : t('Подтвердить заказ')} loading={action.isPending} onPress={() => run('confirm')} />
+            <Button title={t('Отказаться')} variant="danger" onPress={() => confirmRun(t('Отказаться от заказа?'), t('Покупателю вернутся деньги, работа снова будет в продаже.'), 'decline', true)} />
           </>
         ) : null}
         {isArtist && o.status === 'confirmed' ? (
           <View style={styles.ship}>
-            <Field label="Трек-номер отправления" value={tracking} onChangeText={setTracking} autoCapitalize="characters" placeholder="Например, 1234567890" />
-            <Button title="Отметить отправку" loading={action.isPending} disabled={tracking.trim().length < 4} onPress={() => run('ship', { tracking_number: tracking.trim() })} />
+            {o.kind === 'commission' ? (
+              <View style={styles.ship}>
+                <T variant="heading">{t('Фото готовой работы')}</T>
+                <T variant="small">{t('Покупатель увидит их в заказе, они же попадут в сертификат.')}</T>
+                <ScrollView horizontal contentContainerStyle={styles.photos} showsHorizontalScrollIndicator={false}>
+                  {photos.map((u) => (
+                    <Image key={u} source={{ uri: u }} style={styles.photo} contentFit="cover" />
+                  ))}
+                  <Pressable accessibilityRole="button" accessibilityLabel={t('Добавить фото')} onPress={addResultPhoto} style={[styles.photo, styles.photoAdd]}>
+                    {uploading ? <ActivityIndicator color={colors.bordeaux} /> : <Ionicons name="add" size={26} color={colors.bordeaux} />}
+                  </Pressable>
+                </ScrollView>
+              </View>
+            ) : null}
+            <Field label={t('Трек-номер отправления')} value={tracking} onChangeText={setTracking} autoCapitalize="characters" placeholder={t('Например, 1234567890')} />
+            <Button
+              title={t('Отметить отправку')}
+              loading={action.isPending}
+              disabled={tracking.trim().length < 4 || uploading}
+              onPress={() => run('ship', { tracking_number: tracking.trim(), ...(photos.length ? { images: photos } : {}) })}
+            />
           </View>
         ) : null}
         {!isArtist && o.status === 'completed' && !o.has_review ? <ReviewForm orderId={o.id} onDone={refetch} /> : null}
 
-        <Button title={isArtist ? 'Написать покупателю' : 'Написать художнику'} variant="secondary" onPress={chat} />
+        <Button title={isArtist ? t('Написать покупателю') : t('Написать художнику')} variant="secondary" onPress={chat} />
 
         <Divider />
-        <T variant="heading">Доставка</T>
+        <T variant="heading">{t('Доставка')}</T>
         <T variant="body">
-          {methodNames[o.delivery_method]}
-          {o.tracking_number ? `, трек ${o.tracking_number}` : ''}
+          {t(methodNames[o.delivery_method])}
+          {o.tracking_number ? `, ${t('трек')} ${o.tracking_number}` : ''}
         </T>
         <T variant="body">
           {o.address.recipient_name}, {o.address.phone}
         </T>
-        <T variant="small">
-          {[o.address.postal_code, o.address.city, o.address.street].filter(Boolean).join(', ')}
-        </T>
-        {o.address.comment ? <T variant="small">Комментарий: {o.address.comment}</T> : null}
+        <T variant="small">{[o.address.postal_code, o.address.city, o.address.street].filter(Boolean).join(', ')}</T>
+        {o.address.comment ? (
+          <T variant="small">
+            {t('Комментарий')}: {o.address.comment}
+          </T>
+        ) : null}
 
         <Divider />
-        <Line label="Работа" value={formatPrice(o.price_kop)} />
-        <Line label="Доставка" value={o.delivery_kop ? formatPrice(o.delivery_kop) : 'Бесплатно'} />
+        <Line label={t('Работа')} value={formatPrice(o.price_kop)} />
+        <Line label={t('Доставка')} value={o.delivery_kop ? formatPrice(o.delivery_kop) : t('Бесплатно')} />
         {isArtist ? (
           <>
-            <Line label="Комиссия Artista" value={o.commission_kop ? `−${formatPrice(o.commission_kop)}` : '0 ₽'} />
-            <Line label="Вам к выплате" value={formatPrice(o.payout_kop ?? 0)} strong />
-            <T variant="small">{payoutText(o.payout_status)}</T>
+            <Line label={t('Комиссия Artista')} value={o.commission_kop ? `−${formatPrice(o.commission_kop)}` : '0 ₽'} />
+            <Line label={t('Вам к выплате')} value={formatPrice(o.payout_kop ?? 0)} strong />
+            <T variant="small">{payoutText(o.payout_status, t)}</T>
           </>
         ) : (
-          <Line label="Итого" value={formatPrice(o.total_kop)} strong />
+          <Line label={t('Итого')} value={formatPrice(o.total_kop)} strong />
         )}
-        <T variant="small">Заказ от {formatDate(o.created_at)}</T>
+        <T variant="small">{t('Заказ от {date}', { date: formatDate(o.created_at) })}</T>
       </ScrollView>
       <TestPaymentSheet
         payment={payment}
@@ -153,38 +207,42 @@ function OrderView({ o, refetch }: { o: Order; refetch: () => void }) {
   );
 }
 
-function hintFor(o: Order, left: string): string {
+function hintFor(o: Order, left: string, t: TFunc): string {
   const artist = o.my_role === 'artist';
   switch (o.status) {
     case 'awaiting_payment':
-      return artist ? 'Покупатель ещё не оплатил заказ.' : `Оплатите заказ — бронь работы действует ещё ${left}.`;
+      return artist ? t('Покупатель ещё не оплатил заказ.') : t('Оплатите заказ — бронь работы действует ещё {left}.', { left });
     case 'paid':
-      return artist ? `Подтвердите, что работа в наличии. Осталось ${left}, иначе заказ отменится.` : `Ждём подтверждения художника (до ${left}).`;
+      return artist ? t('Подтвердите, что работа в наличии. Осталось {left}, иначе заказ отменится.', { left }) : t('Ждём подтверждения художника (до {left}).', { left });
     case 'confirmed':
-      return artist ? `Упакуйте и отправьте работу, затем укажите трек-номер. Осталось ${left}.` : 'Художник готовит работу к отправке.';
+      if (o.kind === 'commission') return artist ? t('Пишите работу и отправьте её в срок. Осталось {left}.', { left }) : t('Художник работает над заказом. Эскизы и вопросы — в чате.');
+      return artist ? t('Упакуйте и отправьте работу, затем укажите трек-номер. Осталось {left}.', { left }) : t('Художник готовит работу к отправке.');
     case 'shipped':
-      return artist ? 'Ждём, когда покупатель подтвердит получение.' : `Работа в пути. Получение подтвердится автоматически через ${left}.`;
+      return artist ? t('Ждём, когда покупатель подтвердит получение.') : t('Работа в пути. Получение подтвердится автоматически через {left}.', { left });
     case 'cancelled':
-      return o.cancel_reason || 'Заказ отменён.';
+      return o.cancel_reason ? t(o.cancel_reason) : t('Заказ отменён.');
     default:
       return '';
   }
 }
 
-function payoutText(s?: Order['payout_status']): string {
+function payoutText(s: Order['payout_status'], t: TFunc): string {
   switch (s) {
     case 'held':
-      return 'Деньги зарезервированы и поступят после подтверждения получения.';
+      return t('Деньги зарезервированы и поступят после подтверждения получения.');
     case 'released':
-      return 'Выплата переведена.';
+      return t('Выплата переведена.');
     case 'refunded':
-      return 'Деньги возвращены покупателю.';
+      return t('Деньги возвращены покупателю.');
     default:
       return '';
   }
 }
 
 function ReviewForm({ orderId, onDone }: { orderId: string; onDone: () => void }) {
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   const [rating, setRating] = useState(0);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -202,46 +260,33 @@ function ReviewForm({ orderId, onDone }: { orderId: string; onDone: () => void }
   };
   return (
     <View style={styles.review}>
-      <T variant="heading">Как вам работа?</T>
-      <View style={styles.stars} accessibilityRole="radiogroup" accessibilityLabel="Оценка">
+      <T variant="heading">{t('Как вам работа?')}</T>
+      <View style={styles.stars} accessibilityRole="radiogroup" accessibilityLabel={t('Оценка')}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <Pressable
-            key={n}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: n === rating }}
-            accessibilityLabel={`${n} из 5`}
-            onPress={() => setRating(n)}
-            hitSlop={6}>
+          <Pressable key={n} accessibilityRole="radio" accessibilityState={{ checked: n === rating }} accessibilityLabel={t('{n} из 5', { n })} onPress={() => setRating(n)} hitSlop={6}>
             <T variant="display" color={n <= rating ? colors.gold : colors.hairline}>
               ★
             </T>
           </Pressable>
         ))}
       </View>
-      <Field label="Отзыв" value={text} onChangeText={setText} multiline maxLength={2000} placeholder="Упаковка, соответствие фото, общение с художником" />
+      <Field label={t('Отзыв')} value={text} onChangeText={setText} multiline maxLength={2000} placeholder={t('Упаковка, соответствие фото, общение с художником')} />
       {error ? <Notice tone="danger" text={error} /> : null}
-      <Button title="Оставить отзыв" disabled={!rating} loading={busy} onPress={submit} />
+      <Button title={t('Оставить отзыв')} disabled={!rating} loading={busy} onPress={submit} />
     </View>
   );
 }
 
-function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <View style={styles.line}>
-      <T variant={strong ? 'heading' : 'body'}>{label}</T>
-      <T variant={strong ? 'heading' : 'body'}>{value}</T>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.wall },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.wall },
   content: { padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 },
   item: { flexDirection: 'row', gap: space.lg, alignItems: 'center' },
-  thumb: { width: 72, height: 90, borderRadius: radius.art },
+  thumb: { width: 72, height: 90, borderRadius: radius.art, backgroundColor: c.plaster },
   flex: { flex: 1 },
   ship: { gap: space.md },
-  review: { gap: space.md, padding: space.lg, borderRadius: radius.control, backgroundColor: colors.goldSoft },
+  photos: { gap: space.sm },
+  photo: { width: 80, height: 100, borderRadius: radius.art, backgroundColor: c.plaster },
+  photoAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: c.hairline, backgroundColor: c.paper },
+  review: { gap: space.md, padding: space.lg, borderRadius: radius.control, backgroundColor: c.goldSoft },
   stars: { flexDirection: 'row', gap: space.sm },
-  line: { flexDirection: 'row', justifyContent: 'space-between' },
-});
+}));

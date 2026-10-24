@@ -9,7 +9,7 @@ import { ArtworkCard, labelOf, previewAspect, statusLabel } from '@/ui/artwork';
 import { Avatar, Button, Chip, EmptyState, ErrorState, Field, Notice } from '@/ui/primitives';
 
 async function wrap(ui: ReactNode) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   return await render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
@@ -34,6 +34,14 @@ const artwork: Artwork = {
   artist: { id: 'u1', name: 'Анна Петрова', avatar_url: '', city: 'СПб', is_premium: true },
   published_at: null,
   created_at: '2026-10-01T00:00:00Z',
+  palette: [],
+  rooms: [],
+  allow_offers: false,
+  series_id: null,
+  exhibition_id: null,
+  is_promoted: false,
+  auction: null,
+  my_price_kop: null,
 };
 
 const meta = {
@@ -45,6 +53,10 @@ const meta = {
   price_max_kop: 0,
   commission_bp: 1500,
   premium_price_kop: 99000,
+  colors: [],
+  rooms: [],
+  promotion_tariffs: [],
+  offer_min_share_bp: 5000,
 };
 
 describe('ArtworkCard', () => {
@@ -132,7 +144,7 @@ describe('StatusTimeline', () => {
 
   it('marks reached steps and numbers the rest', async () => {
     await render(<StatusTimeline o={base} />);
-    expect(screen.getByLabelText(`Статус заказа: ${orderStatusLabel.shipped}`)).toBeTruthy();
+    expect(screen.getByLabelText(`Статус заказа: ${orderStatusLabel('shipped', (x: string) => x)}`)).toBeTruthy();
     expect(screen.getByText('4')).toBeTruthy(); // последний шаг ещё не пройден
     expect(screen.queryByText('1')).toBeNull();
   });

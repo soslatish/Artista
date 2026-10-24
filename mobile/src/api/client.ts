@@ -1,7 +1,12 @@
 // HTTP-клиент Artista API: JSON-конверт, ошибки по полям, автообновление access-токена.
+import { currentLocale, t } from '@/i18n';
+
 import type { Tokens } from './types';
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+
+/** Адрес сайта для ссылок «Поделиться» (по умолчанию — тот же сервер, что и API). */
+export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL ?? API_URL).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(
@@ -59,7 +64,7 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 }
 
 async function rawRequest<T>(path: string, opts: RequestOptions, token: string | null): Promise<{ status: number; env: Envelope<T> | null; error?: ApiError }> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': currentLocale() };
   let body: BodyInit | undefined;
   if (opts.form) {
     body = opts.form;
@@ -73,7 +78,7 @@ async function rawRequest<T>(path: string, opts: RequestOptions, token: string |
   try {
     res = await fetchImpl(buildUrl(path, opts.query), { method: opts.method ?? 'GET', headers, body });
   } catch {
-    return { status: 0, env: null, error: new ApiError(0, 'network', 'Нет соединения с сервером. Проверьте интернет.') };
+    return { status: 0, env: null, error: new ApiError(0, 'network', t('Нет соединения с сервером. Проверьте интернет.')) };
   }
   if (res.status === 204) return { status: 204, env: null };
   let json: { data?: T; meta?: Record<string, unknown>; error?: { code: string; message: string; fields?: Record<string, string> } } = {};
@@ -87,7 +92,7 @@ async function rawRequest<T>(path: string, opts: RequestOptions, token: string |
     return {
       status: res.status,
       env: null,
-      error: new ApiError(res.status, e?.code ?? 'http_error', e?.message ?? 'Что-то пошло не так. Попробуйте ещё раз.', e?.fields ?? {}),
+      error: new ApiError(res.status, e?.code ?? 'http_error', e?.message ?? t('Что-то пошло не так. Попробуйте ещё раз.'), e?.fields ?? {}),
     };
   }
   return { status: res.status, env: { data: json.data as T, meta: json.meta } };
@@ -162,11 +167,12 @@ export async function del<T = void>(path: string, body?: unknown): Promise<T> {
 export function errorText(e: unknown): string {
   if (e instanceof ApiError) {
     const first = Object.values(e.fields)[0];
-    return first ?? e.message;
+    return t(first ?? e.message);
   }
-  return 'Что-то пошло не так. Попробуйте ещё раз.';
+  return t('Что-то пошло не так. Попробуйте ещё раз.');
 }
 
 export function fieldErrors(e: unknown): Record<string, string> {
-  return e instanceof ApiError ? e.fields : {};
+  if (!(e instanceof ApiError)) return {};
+  return Object.fromEntries(Object.entries(e.fields).map(([k, v]) => [k, t(v)]));
 }

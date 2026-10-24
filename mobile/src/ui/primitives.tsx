@@ -16,9 +16,12 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { useT } from '@/i18n';
 import { initials } from '@/lib/format';
 
-import { colors, fonts, hitSlop, radius, space, type, type TypeVariant } from './theme';
+import { fonts, hitSlop, makeStyles, type Palette, radius, space, type TypeVariant, useTheme } from './theme';
+
+export type IconName = ComponentProps<typeof Ionicons>['name'];
 
 // ---------- текст ----------
 
@@ -29,6 +32,7 @@ interface TProps extends TextProps {
 }
 
 export function T({ variant = 'body', color, center, style, ...rest }: TProps) {
+  const { type } = useTheme();
   return <Text {...rest} style={[type[variant], color ? { color } : null, center ? styles.center : null, style]} />;
 }
 
@@ -42,13 +46,31 @@ interface ButtonProps {
   variant?: ButtonVariant;
   loading?: boolean;
   disabled?: boolean;
-  icon?: ComponentProps<typeof Ionicons>['name'];
+  icon?: IconName;
   style?: StyleProp<ViewStyle>;
   accessibilityHint?: string;
 }
 
+function buttonVariant(c: Palette, v: ButtonVariant): { box: ViewStyle; text: TextStyle & { color: string } } {
+  switch (v) {
+    case 'primary':
+      return { box: { backgroundColor: c.bordeaux }, text: { color: c.onDark } };
+    case 'secondary':
+      return { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.ink }, text: { color: c.ink } };
+    case 'ghost':
+      return { box: { backgroundColor: 'transparent' }, text: { color: c.bordeaux } };
+    case 'danger':
+      return { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.danger }, text: { color: c.danger } };
+    case 'light':
+      return { box: { backgroundColor: '#FFFFFF' }, text: { color: c.brand } };
+    case 'outlineLight':
+      return { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.onDark }, text: { color: c.onDark } };
+  }
+}
+
 export function Button({ title, onPress, variant = 'primary', loading, disabled, icon, style, accessibilityHint }: ButtonProps) {
-  const v = buttonVariants[variant];
+  const { colors } = useTheme();
+  const v = buttonVariant(colors, variant);
   const inactive = disabled || loading;
   return (
     <Pressable
@@ -71,17 +93,8 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
   );
 }
 
-const buttonVariants: Record<ButtonVariant, { box: ViewStyle; text: TextStyle & { color: string } }> = {
-  primary: { box: { backgroundColor: colors.bordeaux }, text: { color: colors.onDark } },
-  secondary: { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.ink }, text: { color: colors.ink } },
-  ghost: { box: { backgroundColor: 'transparent' }, text: { color: colors.bordeaux } },
-  danger: { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.danger }, text: { color: colors.danger } },
-  light: { box: { backgroundColor: colors.paper }, text: { color: colors.bordeaux } },
-  outlineLight: { box: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.onDark }, text: { color: colors.onDark } },
-};
-
 interface IconButtonProps {
-  icon: ComponentProps<typeof Ionicons>['name'];
+  icon: IconName;
   label: string;
   onPress: () => void;
   color?: string;
@@ -89,13 +102,15 @@ interface IconButtonProps {
   badge?: number;
 }
 
-export function IconButton({ icon, label, onPress, color = colors.ink, size = 24, badge }: IconButtonProps) {
+export function IconButton({ icon, label, onPress, color, size = 24, badge }: IconButtonProps) {
+  const { colors } = useTheme();
+  const s = useStyles();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={hitSlop} onPress={onPress} style={styles.iconButton}>
-      <Ionicons name={icon} size={size} color={color} />
+      <Ionicons name={icon} size={size} color={color ?? colors.ink} />
       {badge ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{badge > 9 ? '9+' : badge}</Text>
         </View>
       ) : null}
     </Pressable>
@@ -114,23 +129,25 @@ interface FieldProps extends TextInputProps {
 }
 
 export function Field({ label, error, hint, style, multiline, ref, ...rest }: FieldProps) {
+  const { colors } = useTheme();
+  const s = useStyles();
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={s.fieldLabel}>{label}</Text>
       <TextInput
         ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={colors.graphite}
         multiline={multiline}
-        style={[styles.input, multiline && styles.inputMultiline, error ? styles.inputError : null, style]}
+        style={[s.input, multiline && styles.inputMultiline, error ? s.inputError : null, style]}
         {...rest}
       />
       {error ? (
-        <Text accessibilityLiveRegion="polite" style={styles.fieldError}>
+        <Text accessibilityLiveRegion="polite" style={s.fieldError}>
           {error}
         </Text>
       ) : hint ? (
-        <Text style={styles.fieldHint}>{hint}</Text>
+        <Text style={s.fieldHint}>{hint}</Text>
       ) : null}
     </View>
   );
@@ -142,16 +159,32 @@ interface ChipProps {
   label: string;
   selected?: boolean;
   onPress: () => void;
+  /** Цветная точка слева (фильтр по цвету). */
+  swatch?: string;
 }
 
-export function Chip({ label, selected, onPress }: ChipProps) {
+export function Chip({ label, selected, onPress, swatch }: ChipProps) {
+  const s = useStyles();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!selected }}
-      onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}>
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: !!selected }} onPress={onPress} style={[s.chip, selected && s.chipSelected]}>
+      {swatch ? <View style={[s.swatch, { backgroundColor: swatch }]} /> : null}
+      <Text style={[s.chipText, selected && s.chipTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Переключатель «да/нет» в виде строки с подписью. */
+export function ToggleRow({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+  const s = useStyles();
+  return (
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: value }} accessibilityLabel={label} onPress={() => onChange(!value)} style={s.toggleRow}>
+      <View style={styles.flex}>
+        <T variant="bodyStrong">{label}</T>
+        {hint ? <T variant="small">{hint}</T> : null}
+      </View>
+      <View style={[s.track, value && s.trackOn]}>
+        <View style={[s.thumb, value && s.thumbOn]} />
+      </View>
     </Pressable>
   );
 }
@@ -165,20 +198,24 @@ interface AvatarProps {
 }
 
 export function Avatar({ uri, name, size = 40 }: AvatarProps) {
+  const s = useStyles();
   const box = { width: size, height: size, borderRadius: size / 2 };
   if (uri) return <Image source={{ uri }} style={box} contentFit="cover" accessibilityIgnoresInvertColors />;
   return (
-    <View style={[styles.avatarFallback, box]}>
-      <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initials(name) || 'A'}</Text>
+    <View style={[s.avatarFallback, box]}>
+      <Text style={[s.avatarText, { fontSize: size * 0.38 }]}>{initials(name) || 'A'}</Text>
     </View>
   );
 }
 
 /** Отметка премиум-художника: золотой мазок, без слова «PRO». */
 export function PremiumMark() {
+  const t = useT();
+  const { colors } = useTheme();
+  const s = useStyles();
   return (
-    <View accessible accessibilityRole="image" accessibilityLabel="Премиум-художник" style={styles.premium}>
-      <Ionicons name="brush" size={11} color={colors.bordeaux} />
+    <View accessible accessibilityRole="image" accessibilityLabel={t('Премиум-художник')} style={s.premium}>
+      <Ionicons name="brush" size={11} color={colors.brand} />
     </View>
   );
 }
@@ -186,8 +223,10 @@ export function PremiumMark() {
 // ---------- состояния экрана ----------
 
 export function Loading() {
+  const t = useT();
+  const { colors } = useTheme();
   return (
-    <View style={styles.state} accessibilityLabel="Загрузка">
+    <View style={styles.state} accessibilityLabel={t('Загрузка')}>
       <ActivityIndicator color={colors.bordeaux} />
     </View>
   );
@@ -197,10 +236,11 @@ interface MessageStateProps {
   title: string;
   text?: string;
   action?: ReactNode;
-  icon?: ComponentProps<typeof Ionicons>['name'];
+  icon?: IconName;
 }
 
 export function EmptyState({ title, text, action, icon = 'images-outline' }: MessageStateProps) {
+  const { colors } = useTheme();
   return (
     <View style={styles.state}>
       <Ionicons name={icon} size={36} color={colors.hairline} />
@@ -218,22 +258,25 @@ export function EmptyState({ title, text, action, icon = 'images-outline' }: Mes
 }
 
 export function ErrorState({ text, onRetry }: { text: string; onRetry?: () => void }) {
+  const t = useT();
   return (
     <EmptyState
       icon="cloud-offline-outline"
-      title="Не удалось загрузить"
+      title={t('Не удалось загрузить')}
       text={text}
-      action={onRetry ? <Button title="Повторить" variant="secondary" onPress={onRetry} /> : null}
+      action={onRetry ? <Button title={t('Повторить')} variant="secondary" onPress={onRetry} /> : null}
     />
   );
 }
 
 export function Divider() {
-  return <View style={styles.divider} />;
+  const s = useStyles();
+  return <View style={s.divider} />;
 }
 
 /** Карточка-предупреждение (ошибка формы, подсказка). */
 export function Notice({ text, tone = 'info' }: { text: string; tone?: 'info' | 'danger' | 'success' }) {
+  const { colors, type } = useTheme();
   const bg = tone === 'danger' ? colors.dangerSoft : tone === 'success' ? colors.successSoft : colors.goldSoft;
   const fg = tone === 'danger' ? colors.danger : tone === 'success' ? colors.success : colors.ink;
   return (
@@ -243,20 +286,59 @@ export function Notice({ text, tone = 'info' }: { text: string; tone?: 'info' | 
   );
 }
 
+/** Строка «подпись — значение» (суммы в заказе). */
+export function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <View style={styles.line}>
+      <T variant={strong ? 'heading' : 'body'} style={styles.flex}>
+        {label}
+      </T>
+      <T variant={strong ? 'heading' : 'body'}>{value}</T>
+    </View>
+  );
+}
+
+/** Заголовок раздела с необязательной ссылкой «Все». */
+export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.sectionHeader}>
+      <T variant="title" style={styles.flex}>
+        {title}
+      </T>
+      {action && onAction ? (
+        <Pressable accessibilityRole="button" onPress={onAction} hitSlop={hitSlop}>
+          <T variant="smallStrong" color={colors.bordeaux}>
+            {action}
+          </T>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+// стили, не зависящие от темы
 const styles = StyleSheet.create({
   center: { textAlign: 'center' },
-  button: {
-    minHeight: 50,
-    borderRadius: radius.control,
-    paddingHorizontal: space.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  flex: { flex: 1 },
+  button: { minHeight: 50, borderRadius: radius.control, paddingHorizontal: space.xl, alignItems: 'center', justifyContent: 'center' },
   buttonInner: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   buttonText: { fontFamily: fonts.sansSemi, fontSize: 16 },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.45 },
   iconButton: { padding: space.xs, minWidth: 36, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
+  field: { gap: 6 },
+  inputMultiline: { minHeight: 110, textAlignVertical: 'top' },
+  state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xxl, gap: space.sm, minHeight: 280 },
+  stateTitle: { marginTop: space.sm },
+  stateAction: { marginTop: space.lg, alignSelf: 'stretch' },
+  notice: { padding: space.md, borderRadius: radius.control },
+  line: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+});
+
+// стили, зависящие от темы
+const useStyles = makeStyles((c, t) => ({
   badge: {
     position: 'absolute',
     top: 0,
@@ -264,52 +346,48 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: colors.gold,
+    backgroundColor: c.gold,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
-  badgeText: { fontFamily: fonts.sansBold, fontSize: 10, color: colors.bordeauxDeep },
-  field: { gap: 6 },
-  fieldLabel: { ...type.smallStrong },
+  badgeText: { fontFamily: fonts.sansBold, fontSize: 10, color: '#4A2025' },
+  fieldLabel: { ...t.smallStrong },
   input: {
-    ...type.body,
+    ...t.body,
     minHeight: 48,
     borderWidth: 1,
-    borderColor: colors.hairline,
+    borderColor: c.hairline,
     borderRadius: radius.control,
     paddingHorizontal: space.md,
     paddingVertical: 12,
-    backgroundColor: colors.paper,
+    backgroundColor: c.paper,
   },
-  inputMultiline: { minHeight: 110, textAlignVertical: 'top' },
-  inputError: { borderColor: colors.danger },
-  fieldError: { ...type.small, color: colors.danger },
-  fieldHint: { ...type.small },
+  inputError: { borderColor: c.danger },
+  fieldError: { ...t.small, color: c.danger },
+  fieldHint: { ...t.small },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: colors.hairline,
-    backgroundColor: colors.paper,
+    borderColor: c.hairline,
+    backgroundColor: c.paper,
   },
-  chipSelected: { backgroundColor: colors.bordeaux, borderColor: colors.bordeaux },
-  chipText: { fontFamily: fonts.sansMedium, fontSize: 14, color: colors.ink },
-  chipTextSelected: { color: colors.onDark },
-  avatarFallback: { backgroundColor: colors.bordeauxSoft, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: fonts.serif, color: colors.bordeaux },
-  premium: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  state: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xxl, gap: space.sm, minHeight: 280 },
-  stateTitle: { marginTop: space.sm },
-  stateAction: { marginTop: space.lg, alignSelf: 'stretch' },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline },
-  notice: { padding: space.md, borderRadius: radius.control },
-});
+  chipSelected: { backgroundColor: c.bordeaux, borderColor: c.bordeaux },
+  chipText: { fontFamily: fonts.sansMedium, fontSize: 14, color: c.ink },
+  chipTextSelected: { color: c.onDark },
+  swatch: { width: 14, height: 14, borderRadius: 7, borderWidth: StyleSheet.hairlineWidth, borderColor: c.hairline },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
+  track: { width: 46, height: 28, borderRadius: 14, backgroundColor: c.hairline, padding: 3 },
+  trackOn: { backgroundColor: c.bordeaux },
+  thumb: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF' },
+  thumbOn: { transform: [{ translateX: 18 }] },
+  avatarFallback: { backgroundColor: c.bordeauxSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: fonts.serif, color: c.bordeaux },
+  premium: { width: 18, height: 18, borderRadius: 9, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: c.hairline },
+}));

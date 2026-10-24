@@ -7,7 +7,9 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconButton, T } from './primitives';
-import { colors, space } from './theme';
+import { useT } from '@/i18n';
+
+import { space } from './theme';
 
 const MAX_SCALE = 5;
 
@@ -89,6 +91,7 @@ interface ViewerProps {
 export function ImageViewer({ images, index, visible, title, onClose }: ViewerProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const t = useT();
   const [current, setCurrent] = useState(index);
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent supportedOrientations={['portrait', 'landscape']}>
@@ -109,14 +112,14 @@ export function ImageViewer({ images, index, visible, title, onClose }: ViewerPr
           )}
         />
         <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
-          <T variant="artTitleSmall" color={colors.onDark} numberOfLines={1} style={styles.title}>
+          <T variant="artTitleSmall" color="#FFFFFF" numberOfLines={1} style={styles.title}>
             {title}
           </T>
-          <IconButton icon="close" label="Закрыть просмотр" color={colors.onDark} size={28} onPress={onClose} />
+          <IconButton icon="close" label={t('Закрыть просмотр')} color="#FFFFFF" size={28} onPress={onClose} />
         </View>
         {images.length > 1 ? (
-          <T variant="small" color={colors.onDarkMuted} center style={[styles.counter, { bottom: insets.bottom + space.lg }]}>
-            {current + 1} из {images.length}
+          <T variant="small" color="rgba(255,255,255,0.72)" center style={[styles.counter, { bottom: insets.bottom + space.lg }]}>
+            {t('{n} из {total}', { n: current + 1, total: images.length })}
           </T>
         ) : null}
       </GestureHandlerRootView>

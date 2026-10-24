@@ -9,11 +9,13 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { ApiError } from '@/api/client';
+import { ApiError, patch } from '@/api/client';
 import { SessionProvider, useSession } from '@/auth/session';
 import { installQueryLifecycle } from '@/features/query-lifecycle';
 import { RealtimeBridge } from '@/features/realtime';
-import { colors, fonts } from '@/ui/theme';
+import { deviceLocale, I18nProvider, type Locale, useLocale, useT } from '@/i18n';
+import { loadPref } from '@/lib/prefs';
+import { fonts, ThemeProvider, type ThemePref, useTheme } from '@/ui/theme';
 
 SplashScreen.preventAutoHideAsync();
 installQueryLifecycle();
@@ -29,51 +31,120 @@ function makeClient() {
   });
 }
 
-const screenOptions = {
-  headerTintColor: colors.ink,
-  headerTitleStyle: { fontFamily: fonts.sansSemi, fontSize: 17 },
-  headerStyle: { backgroundColor: colors.wall },
-  headerShadowVisible: false,
-  contentStyle: { backgroundColor: colors.wall },
-  headerBackButtonDisplayMode: 'minimal' as const,
-};
+/** Язык уведомлений на сервере совпадает с языком приложения. */
+function LocaleSync() {
+  const { user, setUser } = useSession();
+  const { locale } = useLocale();
+  useEffect(() => {
+    if (!user || user.locale === locale) return;
+    patch<typeof user>('/me', { locale })
+      .then(setUser)
+      .catch(() => undefined);
+  }, [user, locale, setUser]);
+  return null;
+}
 
 function RootStack() {
   const { ready } = useSession();
+  const t = useT();
+  const { colors, scheme } = useTheme();
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
+  const screenOptions = {
+    headerTintColor: colors.ink,
+    headerTitleStyle: { fontFamily: fonts.sansSemi, fontSize: 17 },
+    headerStyle: { backgroundColor: colors.wall },
+    headerShadowVisible: false,
+    contentStyle: { backgroundColor: colors.wall },
+    headerBackButtonDisplayMode: 'minimal' as const,
+  };
+  const title = (s: string) => ({ title: t(s) });
   return (
     <>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <RealtimeBridge />
+      <LocaleSync />
       <Stack screenOptions={screenOptions}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="welcome" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
-        <Stack.Screen name="login" options={{ title: 'Вход', presentation: 'modal' }} />
-        <Stack.Screen name="register" options={{ title: 'Регистрация', presentation: 'modal' }} />
-        <Stack.Screen name="forgot" options={{ title: 'Восстановление пароля', presentation: 'modal' }} />
+        <Stack.Screen name="login" options={{ ...title('Вход'), presentation: 'modal' }} />
+        <Stack.Screen name="register" options={{ ...title('Регистрация'), presentation: 'modal' }} />
+        <Stack.Screen name="forgot" options={{ ...title('Восстановление пароля'), presentation: 'modal' }} />
         <Stack.Screen name="artwork/[id]" options={{ title: '' }} />
-        <Stack.Screen name="artwork/new" options={{ title: 'Новая работа' }} />
-        <Stack.Screen name="artwork/edit/[id]" options={{ title: 'Редактирование' }} />
+        <Stack.Screen name="artwork/new" options={title('Новая работа')} />
+        <Stack.Screen name="artwork/edit/[id]" options={title('Редактирование')} />
+        <Stack.Screen name="try-on/[id]" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="artist/[id]" options={{ title: '' }} />
-        <Stack.Screen name="checkout/[artworkId]" options={{ title: 'Оформление заказа' }} />
-        <Stack.Screen name="orders/index" options={{ title: 'Заказы' }} />
-        <Stack.Screen name="orders/[id]" options={{ title: 'Заказ' }} />
+        <Stack.Screen name="checkout/[artworkId]" options={title('Оформление заказа')} />
+        <Stack.Screen name="orders/index" options={title('Заказы')} />
+        <Stack.Screen name="orders/[id]" options={title('Заказ')} />
+        <Stack.Screen name="offers/index" options={title('Предложения цены')} />
+        <Stack.Screen name="offers/[id]" options={title('Предложение')} />
+        <Stack.Screen name="offer/new/[artworkId]" options={{ ...title('Предложить цену'), presentation: 'modal' }} />
+        <Stack.Screen name="auction/[id]" options={title('Аукцион')} />
+        <Stack.Screen name="auction/new/[artworkId]" options={{ ...title('Выставить на аукцион'), presentation: 'modal' }} />
+        <Stack.Screen name="commissions/index" options={title('Работы на заказ')} />
+        <Stack.Screen name="commissions/[id]" options={title('Работа на заказ')} />
+        <Stack.Screen name="commission/new/[artistId]" options={{ ...title('Заказать работу'), presentation: 'modal' }} />
+        <Stack.Screen name="collection/[slug]" options={{ title: '' }} />
+        <Stack.Screen name="exhibitions/index" options={title('Выставки')} />
+        <Stack.Screen name="exhibition/[id]" options={{ title: '' }} />
+        <Stack.Screen name="exhibitions/new" options={title('Новая выставка')} />
+        <Stack.Screen name="history" options={title('Вы смотрели')} />
+        <Stack.Screen name="saved-searches" options={title('Сохранённые поиски')} />
+        <Stack.Screen name="certificates/index" options={title('Сертификаты')} />
+        <Stack.Screen name="certificate/[code]" options={title('Сертификат')} />
+        <Stack.Screen name="posts/new" options={{ ...title('Новый пост'), presentation: 'modal' }} />
+        <Stack.Screen name="series" options={title('Серии')} />
+        <Stack.Screen name="promote/[id]" options={{ ...title('Продвижение'), presentation: 'modal' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
-        <Stack.Screen name="notifications" options={{ title: 'Уведомления' }} />
-        <Stack.Screen name="my-artworks" options={{ title: 'Мои работы' }} />
-        <Stack.Screen name="stats" options={{ title: 'Статистика' }} />
-        <Stack.Screen name="premium" options={{ title: 'Премиум', presentation: 'modal' }} />
-        <Stack.Screen name="settings/profile" options={{ title: 'Профиль' }} />
-        <Stack.Screen name="settings/delete" options={{ title: 'Удаление аккаунта' }} />
+        <Stack.Screen name="notifications" options={title('Уведомления')} />
+        <Stack.Screen name="my-artworks" options={title('Мои работы')} />
+        <Stack.Screen name="stats" options={title('Статистика')} />
+        <Stack.Screen name="premium" options={{ ...title('Премиум'), presentation: 'modal' }} />
+        <Stack.Screen name="settings/profile" options={title('Профиль')} />
+        <Stack.Screen name="settings/workshop" options={title('Мастерская')} />
+        <Stack.Screen name="settings/app" options={title('Оформление и язык')} />
+        <Stack.Screen name="settings/delete" options={title('Удаление аккаунта')} />
+        <Stack.Screen name="a/[id]" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="u/[id]" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="e/[id]" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="c/[code]" options={{ headerShown: false, animation: 'none' }} />
+        <Stack.Screen name="collections/[slug]" options={{ headerShown: false, animation: 'none' }} />
       </Stack>
     </>
   );
 }
 
+/** Настройки устройства (тема, язык) читаются до первого кадра, пока виден сплэш. */
+function usePrefs(): { theme: ThemePref; locale: Locale } | null {
+  const [prefs, setPrefs] = useState<{ theme: ThemePref; locale: Locale } | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const [theme, locale] = await Promise.all([loadPref('theme'), loadPref('locale')]);
+      setPrefs({
+        theme: theme === 'light' || theme === 'dark' ? theme : 'system',
+        locale: locale === 'ru' || locale === 'en' ? locale : deviceLocale(),
+      });
+    })();
+  }, []);
+  return prefs;
+}
+
+function Root() {
+  const { colors } = useTheme();
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.wall }}>
+      <RootStack />
+    </GestureHandlerRootView>
+  );
+}
+
 export default function RootLayout() {
   const [client] = useState(makeClient);
+  const prefs = usePrefs();
   const [fontsLoaded, fontError] = useFonts({
     GreatVibes_400Regular,
     CormorantGaramond_600SemiBold,
@@ -84,15 +155,16 @@ export default function RootLayout() {
     Manrope_600SemiBold,
     Manrope_700Bold,
   });
-  if (!fontsLoaded && !fontError) return null;
+  if ((!fontsLoaded && !fontError) || !prefs) return null;
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.wall }}>
-      <QueryClientProvider client={client}>
-        <SessionProvider>
-          <StatusBar style="dark" />
-          <RootStack />
-        </SessionProvider>
-      </QueryClientProvider>
-    </GestureHandlerRootView>
+    <I18nProvider initial={prefs.locale}>
+      <ThemeProvider initial={prefs.theme}>
+        <QueryClientProvider client={client}>
+          <SessionProvider>
+            <Root />
+          </SessionProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }

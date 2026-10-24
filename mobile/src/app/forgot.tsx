@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 
 import { errorText, post } from '@/api/client';
+import { useT } from '@/i18n';
 import { Button, Field, Notice, T } from '@/ui/primitives';
-import { colors, space } from '@/ui/theme';
+import { makeStyles, space } from '@/ui/theme';
 
 export default function ForgotScreen() {
+  const t = useT();
+  const styles = useStyles();
   const [step, setStep] = useState<'email' | 'code' | 'done'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -28,7 +31,7 @@ export default function ForgotScreen() {
 
   const sendCode = () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Проверьте e-mail');
+      setError(t('Проверьте e-mail'));
       return;
     }
     void run(async () => {
@@ -49,22 +52,22 @@ export default function ForgotScreen() {
         {error ? <Notice tone="danger" text={error} /> : null}
         {step === 'email' ? (
           <>
-            <T variant="body">Пришлём 6-значный код на почту, указанную при регистрации.</T>
+            <T variant="body">{t('Пришлём 6-значный код на почту, указанную при регистрации.')}</T>
             <Field label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
-            <Button title="Получить код" loading={busy} onPress={sendCode} />
+            <Button title={t('Получить код')} loading={busy} onPress={sendCode} />
           </>
         ) : step === 'code' ? (
           <>
-            <T variant="body">Если аккаунт с адресом {email.trim()} существует, код уже в почте. Он действует 15 минут.</T>
-            <Field label="Код из письма" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} autoComplete="one-time-code" textContentType="oneTimeCode" />
-            <Field label="Новый пароль" value={password} onChangeText={setPassword} secureTextEntry hint="Не меньше 8 символов" autoComplete="new-password" />
-            <Button title="Сохранить пароль" loading={busy} onPress={reset} disabled={code.length !== 6 || password.length < 8} />
-            <Button title="Отправить код ещё раз" variant="ghost" onPress={sendCode} />
+            <T variant="body">{t('Если аккаунт с адресом {email} существует, код уже в почте. Он действует 15 минут.', { email: email.trim() })}</T>
+            <Field label={t('Код из письма')} value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} autoComplete="one-time-code" textContentType="oneTimeCode" />
+            <Field label={t('Новый пароль')} value={password} onChangeText={setPassword} secureTextEntry hint={t('Не меньше 8 символов')} autoComplete="new-password" />
+            <Button title={t('Сохранить пароль')} loading={busy} onPress={reset} disabled={code.length !== 6 || password.length < 8} />
+            <Button title={t('Отправить код ещё раз')} variant="ghost" onPress={sendCode} />
           </>
         ) : (
           <>
-            <Notice tone="success" text="Пароль изменён. Все остальные сессии завершены." />
-            <Button title="Войти" onPress={() => router.replace('/login')} />
+            <Notice tone="success" text={t('Пароль изменён. Все остальные сессии завершены.')} />
+            <Button title={t('Войти')} onPress={() => router.replace('/login')} />
           </>
         )}
       </ScrollView>
@@ -72,7 +75,7 @@ export default function ForgotScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.wall },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.wall },
   content: { padding: space.xl, gap: space.lg },
-});
+}));

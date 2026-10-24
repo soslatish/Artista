@@ -1,16 +1,20 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors } from '@/api/client';
 import { useUpdateMe } from '@/api/hooks';
 import { uploadImage } from '@/api/upload';
 import { useSession } from '@/auth/session';
+import { useT } from '@/i18n';
 import { Avatar, Button, Field, Notice, T } from '@/ui/primitives';
-import { colors, space } from '@/ui/theme';
+import { makeStyles, space, useColors } from '@/ui/theme';
 
 export default function EditProfileScreen() {
+  const t = useT();
+  const styles = useStyles();
+  const colors = useColors();
   const { user, setUser } = useSession();
   const update = useUpdateMe();
   const [form, setForm] = useState({
@@ -64,34 +68,38 @@ export default function EditProfileScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Pressable accessibilityRole="button" accessibilityLabel="Сменить фото профиля" onPress={pickAvatar} style={styles.avatar}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('Сменить фото профиля')} onPress={pickAvatar} style={styles.avatar}>
           <Avatar uri={form.avatar_url} name={form.name} size={96} />
           <T variant="smallStrong" color={colors.bordeaux}>
-            {uploading ? 'Загружаем…' : 'Сменить фото'}
+            {uploading ? t('Загружаем…') : t('Сменить фото')}
           </T>
         </Pressable>
-        <Field label="Имя" value={form.name} onChangeText={set('name')} error={errors.name} />
-        <Field label="Город" value={form.city} onChangeText={set('city')} error={errors.city} />
-        <Field label="О себе" value={form.bio} onChangeText={set('bio')} multiline maxLength={1000} error={errors.bio} placeholder={user.role === 'artist' ? 'Образование, техника, выставки' : ''} />
+        <Field label={t('Имя')} value={form.name} onChangeText={set('name')} error={errors.name} />
+        <Field label={t('Город')} value={form.city} onChangeText={set('city')} error={errors.city} />
+        <Field label={t('О себе')} value={form.bio} onChangeText={set('bio')} multiline maxLength={1000} error={errors.bio} placeholder={user.role === 'artist' ? t('Образование, техника, выставки') : ''} />
         {user.role === 'artist' ? (
           <View style={styles.group}>
-            <T variant="heading">Ссылки</T>
-            <Field label="ВКонтакте" value={form.vk} onChangeText={set('vk')} autoCapitalize="none" placeholder="https://vk.com/…" />
+            <T variant="heading">{t('Ссылки')}</T>
+            <Field label={t('ВКонтакте')} value={form.vk} onChangeText={set('vk')} autoCapitalize="none" placeholder="https://vk.com/…" />
             <Field label="Telegram" value={form.telegram} onChangeText={set('telegram')} autoCapitalize="none" placeholder="@username" />
-            <Field label="Сайт или портфолио" value={form.website} onChangeText={set('website')} autoCapitalize="none" placeholder="https://…" />
-            {errors.social ? <T variant="small" color={colors.danger}>{errors.social}</T> : null}
+            <Field label={t('Сайт или портфолио')} value={form.website} onChangeText={set('website')} autoCapitalize="none" placeholder="https://…" />
+            {errors.social ? (
+              <T variant="small" color={colors.danger}>
+                {errors.social}
+              </T>
+            ) : null}
           </View>
         ) : null}
         {error ? <Notice tone="danger" text={error} /> : null}
-        <Button title="Сохранить" loading={update.isPending} disabled={uploading} onPress={save} />
+        <Button title={t('Сохранить')} loading={update.isPending} disabled={uploading} onPress={save} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.wall },
+const useStyles = makeStyles((c) => ({
+  root: { flex: 1, backgroundColor: c.wall },
   content: { padding: space.lg, gap: space.lg, paddingBottom: space.xxl },
   avatar: { alignItems: 'center', gap: space.sm },
   group: { gap: space.md },
-});
+}));
