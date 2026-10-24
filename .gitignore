@@ -22,3 +22,4 @@ mobile/android/
 .DS_Store
 infra/.seeded
 mobile/coverage/
+infra/start.log
