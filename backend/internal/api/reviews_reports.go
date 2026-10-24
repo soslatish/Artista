@@ -60,7 +60,8 @@ func (s *Server) createReview(w http.ResponseWriter, r *http.Request, u httpx.Us
 	if err != nil {
 		return err
 	}
-	s.notify(r.Context(), artistID, "new_review", "Новый отзыв", fmt.Sprintf("%d★ за «%s»", in.Rating, title), map[string]any{"review_id": rid})
+	s.notify(r.Context(), artistID, "new_review", tr("Новый отзыв", "New review"),
+		tr("%d★ за «%s»", "%d★ for “%s”", in.Rating, title), map[string]any{"review_id": rid})
 	httpx.JSON(w, http.StatusCreated, map[string]string{"id": rid}, nil)
 	return nil
 }
@@ -116,7 +117,8 @@ func (s *Server) createReport(w http.ResponseWriter, r *http.Request, u httpx.Us
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
-	table := map[string]string{"artwork": "artworks", "user": "users", "message": "messages"}[in.TargetType]
+	table := map[string]string{"artwork": "artworks", "user": "users", "message": "messages",
+		"question": "artwork_questions", "post": "posts"}[in.TargetType]
 	if table == "" || !isUUID(in.TargetID) {
 		return httpx.Validation(map[string]string{"target": "Некорректный объект жалобы"})
 	}
@@ -204,7 +206,11 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 			case "artwork":
 				q = `UPDATE artworks SET status = 'hidden', updated_at = now() WHERE id = $1 AND status IN ('draft','published','archived')`
 			case "message":
-				q = `UPDATE messages SET body = 'Сообщение удалено модератором' WHERE id = $1`
+				q = `UPDATE messages SET body = 'Сообщение удалено модератором', image_url = '' WHERE id = $1`
+			case "question":
+				q = `UPDATE artwork_questions SET hidden_at = now() WHERE id = $1`
+			case "post":
+				q = `UPDATE posts SET hidden_at = now() WHERE id = $1`
 			case "user":
 				bannedUser = targetID
 				q = `UPDATE users SET banned_at = now(), updated_at = now() WHERE id = $1 AND role <> 'admin'`

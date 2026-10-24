@@ -24,6 +24,9 @@ type ArtworkInput struct {
 	Year        *int     `json:"year"`
 	PriceKop    int64    `json:"price_kop"`
 	Images      []string `json:"images"`
+	Rooms       []string `json:"rooms"`
+	AllowOffers bool     `json:"allow_offers"`
+	SeriesID    *string  `json:"series_id"`
 }
 
 const (
@@ -72,6 +75,9 @@ func ValidateArtwork(in ArtworkInput, forPublish bool) FieldErrors {
 	}
 	if in.Year != nil && (*in.Year < 1000 || *in.Year > time.Now().Year()) {
 		errs["year"] = "Некорректный год"
+	}
+	if !ValidRooms(in.Rooms) {
+		errs["rooms"] = "Выберите интерьеры из списка"
 	}
 	if len(in.Images) > maxImages {
 		errs["images"] = "Не больше 10 фотографий"

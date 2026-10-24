@@ -55,14 +55,18 @@ var deliveryMethods = []Option{
 
 // Meta — справочники каталога для клиента.
 type Meta struct {
-	Categories      []Option `json:"categories"`
-	Styles          []Option `json:"styles"`
-	Techniques      []Option `json:"techniques"`
-	DeliveryMethods []Option `json:"delivery_methods"`
-	PriceMinKop     int64    `json:"price_min_kop"`
-	PriceMaxKop     int64    `json:"price_max_kop"`
-	CommissionBP    int      `json:"commission_bp"`
-	PremiumPriceKop int64    `json:"premium_price_kop"`
+	Categories      []Option          `json:"categories"`
+	Styles          []Option          `json:"styles"`
+	Techniques      []Option          `json:"techniques"`
+	DeliveryMethods []Option          `json:"delivery_methods"`
+	PriceMinKop     int64             `json:"price_min_kop"`
+	PriceMaxKop     int64             `json:"price_max_kop"`
+	CommissionBP    int               `json:"commission_bp"`
+	PremiumPriceKop int64             `json:"premium_price_kop"`
+	Colors          []ColorOption     `json:"colors"`
+	Rooms           []Option          `json:"rooms"`
+	Promotion       []PromotionTariff `json:"promotion_tariffs"`
+	OfferMinShareBP int               `json:"offer_min_share_bp"`
 }
 
 // CatalogMeta возвращает справочники (копии, чтобы клиенты не меняли исходные данные).
@@ -76,6 +80,10 @@ func CatalogMeta() Meta {
 		PriceMaxKop:     MaxArtworkPriceKop,
 		CommissionBP:    CommissionRateBP,
 		PremiumPriceKop: PremiumPriceKop,
+		Colors:          append([]ColorOption(nil), Colors...),
+		Rooms:           append([]Option(nil), Rooms...),
+		Promotion:       append([]PromotionTariff(nil), PromotionTariffs...),
+		OfferMinShareBP: OfferMinShareBP,
 	}
 }
 

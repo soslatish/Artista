@@ -20,6 +20,7 @@ type messageDTO struct {
 	ConversationID string     `json:"conversation_id"`
 	SenderID       string     `json:"sender_id"`
 	Body           string     `json:"body"`
+	ImageURL       string     `json:"image_url"`
 	ReadAt         *time.Time `json:"read_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 }
@@ -49,9 +50,9 @@ func conversationOther(ctx context.Context, q querier, convID, userID string) (s
 	return buyer, nil
 }
 
-func validateMessage(body string) (string, error) {
+func validateMessage(body, imageURL string) (string, error) {
 	body = strings.TrimSpace(body)
-	if body == "" || utf8.RuneCountInString(body) > maxMessageLen {
+	if (body == "" && imageURL == "") || utf8.RuneCountInString(body) > maxMessageLen {
 		return "", httpx.Validation(map[string]string{"body": "Сообщение — от 1 до 2000 символов"})
 	}
 	return body, nil
@@ -107,7 +108,7 @@ func (s *Server) startConversation(w http.ResponseWriter, r *http.Request, u htt
 		return fmt.Errorf("upsert conversation: %w", err)
 	}
 	if strings.TrimSpace(in.Message) != "" {
-		if _, err := s.postMessage(r.Context(), convID, u.ID, in.UserID, in.Message); err != nil {
+		if _, err := s.postMessage(r.Context(), convID, u.ID, in.UserID, in.Message, ""); err != nil {
 			return err
 		}
 	}
@@ -122,7 +123,7 @@ func (s *Server) startConversation(w http.ResponseWriter, r *http.Request, u htt
 const conversationSelect = `SELECT c.id, c.last_message_at,
 	o.id, o.name, o.avatar_url,
 	a.id, a.title, coalesce((SELECT url FROM artwork_images WHERE artwork_id = a.id ORDER BY position LIMIT 1), ''),
-	m.id, m.sender_id, m.body, m.read_at, m.created_at,
+	m.id, m.sender_id, m.body, m.image_url, m.read_at, m.created_at,
 	(SELECT count(*) FROM messages um WHERE um.conversation_id = c.id AND um.sender_id <> $1 AND um.read_at IS NULL)
 FROM conversations c
 JOIN users o ON o.id = CASE WHEN c.buyer_id = $1 THEN c.artist_id ELSE c.buyer_id END
@@ -131,10 +132,10 @@ LEFT JOIN LATERAL (SELECT * FROM messages WHERE conversation_id = c.id ORDER BY 
 
 func scanConversation(row pgx.Row) (conversationDTO, error) {
 	var c conversationDTO
-	var artID, artTitle, artImg, msgID, msgSender, msgBody *string
+	var artID, artTitle, artImg, msgID, msgSender, msgBody, msgImage *string
 	var msgRead, msgCreated *time.Time
 	err := row.Scan(&c.ID, &c.UpdatedAt, &c.Other.ID, &c.Other.Name, &c.Other.AvatarURL,
-		&artID, &artTitle, &artImg, &msgID, &msgSender, &msgBody, &msgRead, &msgCreated, &c.Unread)
+		&artID, &artTitle, &artImg, &msgID, &msgSender, &msgBody, &msgImage, &msgRead, &msgCreated, &c.Unread)
 	if err != nil {
 		return c, err
 	}
@@ -142,7 +143,8 @@ func scanConversation(row pgx.Row) (conversationDTO, error) {
 		c.Artwork = &orderArtwork{ID: *artID, Title: *artTitle, ImageURL: deref(artImg)}
 	}
 	if msgID != nil {
-		c.LastMessage = &messageDTO{ID: *msgID, ConversationID: c.ID, SenderID: *msgSender, Body: *msgBody, ReadAt: msgRead, CreatedAt: *msgCreated}
+		c.LastMessage = &messageDTO{ID: *msgID, ConversationID: c.ID, SenderID: *msgSender, Body: *msgBody, ImageURL: deref(msgImage),
+			ReadAt: msgRead, CreatedAt: *msgCreated}
 	}
 	return c, nil
 }
@@ -195,7 +197,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, u httpx.Us
 		return err
 	}
 	p := parsePage(r)
-	rows, err := s.DB.Query(r.Context(), fmt.Sprintf(`SELECT id, conversation_id, sender_id, body, read_at, created_at
+	rows, err := s.DB.Query(r.Context(), fmt.Sprintf(`SELECT id, conversation_id, sender_id, body, image_url, read_at, created_at
 		FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d`, p.limit, p.offset), id)
 	if err != nil {
 		return err
@@ -204,7 +206,7 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request, u httpx.Us
 	items := []messageDTO{}
 	for rows.Next() {
 		var m messageDTO
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.Body, &m.ReadAt, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.Body, &m.ImageURL, &m.ReadAt, &m.CreatedAt); err != nil {
 			return err
 		}
 		items = append(items, m)
@@ -222,16 +224,26 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, u httpx.Use
 		return err
 	}
 	var in struct {
-		Body string `json:"body"`
+		Body     string `json:"body"`
+		ImageURL string `json:"image_url"`
 	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
+	}
+	if in.ImageURL != "" {
+		errs, err := s.validateImages(r.Context(), u.ID, []string{in.ImageURL})
+		if err != nil {
+			return err
+		}
+		if errs != nil {
+			return httpx.Validation(map[string]string{"image_url": errs["images"]})
+		}
 	}
 	other, err := conversationOther(r.Context(), s.DB, id, u.ID)
 	if err != nil {
 		return err
 	}
-	m, err := s.postMessage(r.Context(), id, u.ID, other, in.Body)
+	m, err := s.postMessage(r.Context(), id, u.ID, other, in.Body, in.ImageURL)
 	if err != nil {
 		return err
 	}
@@ -239,17 +251,17 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, u httpx.Use
 	return nil
 }
 
-func (s *Server) postMessage(ctx context.Context, convID, senderID, recipientID, body string) (messageDTO, error) {
-	body, err := validateMessage(body)
+func (s *Server) postMessage(ctx context.Context, convID, senderID, recipientID, body, imageURL string) (messageDTO, error) {
+	body, err := validateMessage(body, imageURL)
 	if err != nil {
 		return messageDTO{}, err
 	}
 	var m messageDTO
 	var senderName string
 	err = s.withTx(ctx, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `INSERT INTO messages (conversation_id, sender_id, body) VALUES ($1, $2, $3)
-			RETURNING id, conversation_id, sender_id, body, read_at, created_at`, convID, senderID, body).
-			Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.Body, &m.ReadAt, &m.CreatedAt); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO messages (conversation_id, sender_id, body, image_url) VALUES ($1, $2, $3, $4)
+			RETURNING id, conversation_id, sender_id, body, image_url, read_at, created_at`, convID, senderID, body, imageURL).
+			Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.Body, &m.ImageURL, &m.ReadAt, &m.CreatedAt); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE conversations SET last_message_at = now() WHERE id = $1`, convID); err != nil {
@@ -262,7 +274,11 @@ func (s *Server) postMessage(ctx context.Context, convID, senderID, recipientID,
 	}
 	s.hub.Send(recipientID, Event{Type: "message", Data: m})
 	s.hub.Send(senderID, Event{Type: "message", Data: m})
-	s.pushOnly(ctx, recipientID, senderName, truncate(body, 120), map[string]any{"conversation_id": convID})
+	preview := truncate(body, 120)
+	if preview == "" {
+		preview = "📷"
+	}
+	s.pushOnly(ctx, recipientID, senderName, preview, map[string]any{"conversation_id": convID})
 	return m, nil
 }
 

@@ -12,22 +12,28 @@ import (
 
 // Config — настройки приложения.
 type Config struct {
-	Env              string // dev | prod
-	Addr             string
-	DatabaseURL      string
-	JWTSecret        []byte
-	AccessTTL        time.Duration
-	RefreshTTL       time.Duration
-	PublicBaseURL    string // базовый URL для ссылок на файлы
-	UploadDir        string
-	MaxUploadBytes   int64
-	PaymentsProvider string // stub
-	PushProvider     string // log
-	MailProvider     string // log
-	CORSOrigins      []string
-	WorkerInterval   time.Duration
-	AuthRatePerMin   int // лимит запросов на вход/регистрацию с одного IP в минуту
-	APIRatePerMin    int // общий лимит запросов с одного IP в минуту
+	Env           string // dev | prod
+	Addr          string
+	DatabaseURL   string
+	JWTSecret     []byte
+	AccessTTL     time.Duration
+	RefreshTTL    time.Duration
+	PublicBaseURL string // базовый URL для ссылок на файлы
+	SiteURL       string // адрес сайта для публичных ссылок (по умолчанию = PublicBaseURL)
+	// для App Links / Universal Links (необязательно)
+	AndroidCertFingerprints []string // SHA-256 отпечатки ключа подписи (через запятую)
+	AppleTeamID             string
+	// ссылки на магазины для сайта
+	StoreGooglePlay, StoreRuStore, StoreAppStore string
+	UploadDir                                    string
+	MaxUploadBytes                               int64
+	PaymentsProvider                             string // stub
+	PushProvider                                 string // log
+	MailProvider                                 string // log
+	CORSOrigins                                  []string
+	WorkerInterval                               time.Duration
+	AuthRatePerMin                               int // лимит запросов на вход/регистрацию с одного IP в минуту
+	APIRatePerMin                                int // общий лимит запросов с одного IP в минуту
 	// AllowStubPayments — явное разрешение тестовых платежей (иначе stub запрещён в любом окружении).
 	AllowStubPayments bool
 	// TrustProxyHeaders — брать IP клиента из X-Real-IP (только за своим nginx).
@@ -37,24 +43,30 @@ type Config struct {
 // Load читает окружение и проверяет обязательные значения.
 func Load() (Config, error) {
 	c := Config{
-		Env:               env("APP_ENV", "dev"),
-		Addr:              env("HTTP_ADDR", ":8080"),
-		DatabaseURL:       os.Getenv("DATABASE_URL"),
-		JWTSecret:         []byte(os.Getenv("JWT_SECRET")),
-		AccessTTL:         durationEnv("ACCESS_TTL", 15*time.Minute),
-		RefreshTTL:        durationEnv("REFRESH_TTL", 30*24*time.Hour),
-		PublicBaseURL:     strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
-		UploadDir:         env("UPLOAD_DIR", "./uploads"),
-		MaxUploadBytes:    int64Env("MAX_UPLOAD_BYTES", 10<<20),
-		PaymentsProvider:  env("PAYMENTS_PROVIDER", "stub"),
-		PushProvider:      env("PUSH_PROVIDER", "log"),
-		MailProvider:      env("MAIL_PROVIDER", "log"),
-		CORSOrigins:       splitList(env("CORS_ORIGINS", "*")),
-		WorkerInterval:    durationEnv("WORKER_INTERVAL", time.Minute),
-		AuthRatePerMin:    int(int64Env("AUTH_RATE_PER_MIN", 20)),
-		APIRatePerMin:     int(int64Env("API_RATE_PER_MIN", 600)),
-		AllowStubPayments: os.Getenv("ALLOW_STUB_PAYMENTS") == "true",
-		TrustProxyHeaders: os.Getenv("TRUST_PROXY_HEADERS") == "true",
+		Env:                     env("APP_ENV", "dev"),
+		Addr:                    env("HTTP_ADDR", ":8080"),
+		DatabaseURL:             os.Getenv("DATABASE_URL"),
+		JWTSecret:               []byte(os.Getenv("JWT_SECRET")),
+		AccessTTL:               durationEnv("ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:              durationEnv("REFRESH_TTL", 30*24*time.Hour),
+		PublicBaseURL:           strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8080"), "/"),
+		SiteURL:                 strings.TrimRight(os.Getenv("SITE_URL"), "/"),
+		AndroidCertFingerprints: splitList(os.Getenv("ANDROID_CERT_FINGERPRINTS")),
+		AppleTeamID:             os.Getenv("APPLE_TEAM_ID"),
+		StoreGooglePlay:         env("STORE_GOOGLE_PLAY", "https://play.google.com/store/apps/details?id=com.aleksandr.artista"),
+		StoreRuStore:            env("STORE_RUSTORE", "https://www.rustore.ru/catalog/app/com.aleksandr.artista"),
+		StoreAppStore:           os.Getenv("STORE_APP_STORE"),
+		UploadDir:               env("UPLOAD_DIR", "./uploads"),
+		MaxUploadBytes:          int64Env("MAX_UPLOAD_BYTES", 10<<20),
+		PaymentsProvider:        env("PAYMENTS_PROVIDER", "stub"),
+		PushProvider:            env("PUSH_PROVIDER", "log"),
+		MailProvider:            env("MAIL_PROVIDER", "log"),
+		CORSOrigins:             splitList(env("CORS_ORIGINS", "*")),
+		WorkerInterval:          durationEnv("WORKER_INTERVAL", time.Minute),
+		AuthRatePerMin:          int(int64Env("AUTH_RATE_PER_MIN", 20)),
+		APIRatePerMin:           int(int64Env("API_RATE_PER_MIN", 600)),
+		AllowStubPayments:       os.Getenv("ALLOW_STUB_PAYMENTS") == "true",
+		TrustProxyHeaders:       os.Getenv("TRUST_PROXY_HEADERS") == "true",
 	}
 	var problems []string
 	if c.DatabaseURL == "" {

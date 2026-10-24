@@ -68,6 +68,7 @@ type party struct {
 // orderDTO — заказ для клиента.
 type orderDTO struct {
 	ID             string       `json:"id"`
+	Kind           string       `json:"kind"`
 	Status         string       `json:"status"`
 	PriceKop       int64        `json:"price_kop"`
 	DeliveryKop    int64        `json:"delivery_kop"`
@@ -80,6 +81,7 @@ type orderDTO struct {
 	PayoutStatus   string       `json:"payout_status,omitempty"`
 	CancelReason   string       `json:"cancel_reason"`
 	DeadlineAt     *time.Time   `json:"deadline_at"`
+	ShipDays       *int         `json:"ship_days"`
 	Artwork        orderArtwork `json:"artwork"`
 	Buyer          party        `json:"buyer"`
 	Artist         party        `json:"artist"`
@@ -93,7 +95,7 @@ type orderDTO struct {
 	CreatedAt      time.Time    `json:"created_at"`
 }
 
-const orderSelect = `SELECT o.id, o.status, o.price_kop, o.delivery_kop, o.commission_kop, o.total_kop, o.delivery_method,
+const orderSelect = `SELECT o.id, o.kind, o.ship_days, o.status, o.price_kop, o.delivery_kop, o.commission_kop, o.total_kop, o.delivery_method,
 	o.address, o.tracking_number, o.payout_status, o.cancel_reason, o.deadline_at,
 	a.id, a.title, coalesce((SELECT url FROM artwork_images WHERE artwork_id = a.id ORDER BY position LIMIT 1), ''),
 	b.id, b.name, b.avatar_url, ar.id, ar.name, ar.avatar_url,
@@ -106,7 +108,7 @@ JOIN users ar ON ar.id = o.artist_id `
 
 func scanOrder(row pgx.Row, viewerID string) (orderDTO, error) {
 	var o orderDTO
-	err := row.Scan(&o.ID, &o.Status, &o.PriceKop, &o.DeliveryKop, &o.CommissionKop, &o.TotalKop, &o.DeliveryMethod,
+	err := row.Scan(&o.ID, &o.Kind, &o.ShipDays, &o.Status, &o.PriceKop, &o.DeliveryKop, &o.CommissionKop, &o.TotalKop, &o.DeliveryMethod,
 		&o.Address, &o.TrackingNumber, &o.PayoutStatus, &o.CancelReason, &o.DeadlineAt,
 		&o.Artwork.ID, &o.Artwork.Title, &o.Artwork.ImageURL,
 		&o.Buyer.ID, &o.Buyer.Name, &o.Buyer.AvatarURL, &o.Artist.ID, &o.Artist.Name, &o.Artist.AvatarURL,
@@ -151,58 +153,10 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request, u httpx.Use
 	if errs := in.Address.validate(); len(errs) > 0 {
 		return httpx.Validation(errs)
 	}
-	var orderID, artistID, title string
+	var orderID string
 	err := s.withTx(r.Context(), func(tx pgx.Tx) error {
-		var unpaid int
-		if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM orders WHERE buyer_id = $1 AND status = 'awaiting_payment'`, u.ID).Scan(&unpaid); err != nil {
-			return err
-		}
-		if unpaid >= maxUnpaidOrders {
-			return httpx.Conflict("too_many_unpaid", "Сначала оплатите или отмените неоплаченные заказы")
-		}
-		var status string
-		var price int64
-		var wcm, hcm, dcm float64
-		err := tx.QueryRow(r.Context(), `SELECT artist_id, status, price_kop, title, width_cm::float8, height_cm::float8, depth_cm::float8
-			FROM artworks WHERE id = $1 FOR UPDATE`, in.ArtworkID).Scan(&artistID, &status, &price, &title, &wcm, &hcm, &dcm)
-		if isNoRows(err) {
-			return httpx.NotFound("Работа не найдена")
-		}
-		if err != nil {
-			return err
-		}
-		if artistID == u.ID {
-			return httpx.BadRequest("Нельзя купить свою работу")
-		}
-		if status != "published" {
-			return httpx.Conflict("artwork_unavailable", "Работа уже зарезервирована или продана")
-		}
-		quote, err := domain.QuoteDelivery(domain.DeliveryMethod(in.DeliveryMethod), in.Address.City, price, domain.MaxSide(wcm, hcm, dcm))
-		if err != nil {
-			return httpx.Validation(map[string]string{"delivery_method": deliveryErrorText(err)})
-		}
-		premium, err := isPremiumActive(r.Context(), tx, artistID)
-		if err != nil {
-			return err
-		}
-		monthSales, err := artistMonthSales(r.Context(), tx, artistID)
-		if err != nil {
-			return err
-		}
-		commission := domain.Commission(price, premium, monthSales)
-		addr, _ := json.Marshal(in.Address)
-		err = tx.QueryRow(r.Context(), `INSERT INTO orders (buyer_id, artist_id, artwork_id, price_kop, delivery_kop, commission_kop,
-				total_kop, delivery_method, address, deadline_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-			u.ID, artistID, in.ArtworkID, price, quote.PriceKop, commission, price+quote.PriceKop,
-			in.DeliveryMethod, addr, domain.DeadlineFor(domain.StatusAwaitingPayment, time.Now())).Scan(&orderID)
-		if isUniqueViolation(err) {
-			return httpx.Conflict("artwork_unavailable", "Работа уже зарезервирована")
-		}
-		if err != nil {
-			return fmt.Errorf("insert order: %w", err)
-		}
-		_, err = tx.Exec(r.Context(), `UPDATE artworks SET status = 'reserved', updated_at = now() WHERE id = $1`, in.ArtworkID)
+		var err error
+		orderID, err = s.createOrderTx(r.Context(), tx, u.ID, in.ArtworkID, domain.DeliveryMethod(in.DeliveryMethod), in.Address)
 		return err
 	})
 	if err != nil {
@@ -214,6 +168,123 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request, u httpx.Use
 	}
 	httpx.JSON(w, http.StatusCreated, o, nil)
 	return nil
+}
+
+// priceLock — действующая бронь цены покупателя на работу.
+type priceLock struct {
+	id, source, sourceID string
+	priceKop             int64
+}
+
+// activePriceLock — неиспользованная и не истёкшая бронь (принятое предложение, выигранный аукцион).
+func activePriceLock(ctx context.Context, tx pgx.Tx, artworkID, userID string) (*priceLock, error) {
+	var l priceLock
+	err := tx.QueryRow(ctx, `SELECT id, source, source_id, price_kop FROM price_locks
+		WHERE artwork_id = $1 AND user_id = $2 AND used_at IS NULL AND released_at IS NULL AND expires_at > now()
+		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, artworkID, userID).Scan(&l.id, &l.source, &l.sourceID, &l.priceKop)
+	if isNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
+// createOrderTx создаёт заказ на работу. Цена — из брони покупателя, если она есть, иначе из карточки.
+func (s *Server) createOrderTx(ctx context.Context, tx pgx.Tx, buyerID, artworkID string, method domain.DeliveryMethod, addr Address) (string, error) {
+	var unpaid int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM orders WHERE buyer_id = $1 AND status = 'awaiting_payment'`, buyerID).Scan(&unpaid); err != nil {
+		return "", err
+	}
+	if unpaid >= maxUnpaidOrders {
+		return "", httpx.Conflict("too_many_unpaid", "Сначала оплатите или отмените неоплаченные заказы")
+	}
+	var artistID, status string
+	var price int64
+	var wcm, hcm, dcm float64
+	err := tx.QueryRow(ctx, `SELECT artist_id, status, price_kop, width_cm::float8, height_cm::float8, depth_cm::float8
+		FROM artworks WHERE id = $1 FOR UPDATE`, artworkID).Scan(&artistID, &status, &price, &wcm, &hcm, &dcm)
+	if isNoRows(err) {
+		return "", httpx.NotFound("Работа не найдена")
+	}
+	if err != nil {
+		return "", err
+	}
+	if artistID == buyerID {
+		return "", httpx.BadRequest("Нельзя купить свою работу")
+	}
+	lock, err := activePriceLock(ctx, tx, artworkID, buyerID)
+	if err != nil {
+		return "", err
+	}
+	kind := "artwork"
+	switch {
+	case lock != nil && lock.source == "auction" && status == "reserved":
+		// победитель аукциона: работа зарезервирована за ним
+	case status == "published":
+	case status == "auction":
+		return "", httpx.Conflict("artwork_on_auction", "Работа продаётся на аукционе — сделайте ставку")
+	default:
+		return "", httpx.Conflict("artwork_unavailable", "Работа уже зарезервирована или продана")
+	}
+	if lock != nil {
+		price, kind = lock.priceKop, lock.source
+	} else if onVacation, until, err := artistOnVacation(ctx, tx, artistID); err != nil {
+		return "", err
+	} else if onVacation {
+		return "", vacationError(until)
+	}
+	quote, err := domain.QuoteDelivery(method, addr.City, price, domain.MaxSide(wcm, hcm, dcm))
+	if err != nil {
+		return "", httpx.Validation(map[string]string{"delivery_method": deliveryErrorText(err)})
+	}
+	commission, err := currentCommission(ctx, tx, artistID, price)
+	if err != nil {
+		return "", err
+	}
+	addrJSON, _ := json.Marshal(addr)
+	var lockID *string
+	if lock != nil {
+		lockID = &lock.id
+	}
+	var orderID string
+	err = tx.QueryRow(ctx, `INSERT INTO orders (buyer_id, artist_id, artwork_id, price_kop, delivery_kop, commission_kop,
+			total_kop, delivery_method, address, deadline_at, kind, price_lock_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+		buyerID, artistID, artworkID, price, quote.PriceKop, commission, price+quote.PriceKop,
+		string(method), addrJSON, domain.DeadlineFor(domain.StatusAwaitingPayment, time.Now()), kind, lockID).Scan(&orderID)
+	if isUniqueViolation(err) {
+		return "", httpx.Conflict("artwork_unavailable", "Работа уже зарезервирована")
+	}
+	if err != nil {
+		return "", fmt.Errorf("insert order: %w", err)
+	}
+	if lock != nil {
+		if _, err := tx.Exec(ctx, `UPDATE price_locks SET used_at = now() WHERE id = $1`, lock.id); err != nil {
+			return "", err
+		}
+		if lock.source == "offer" {
+			if _, err := tx.Exec(ctx, `UPDATE offers SET status = 'used', updated_at = now() WHERE id = $1`, lock.sourceID); err != nil {
+				return "", err
+			}
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE artworks SET status = 'reserved', updated_at = now() WHERE id = $1`, artworkID)
+	return orderID, err
+}
+
+// currentCommission — комиссия с учётом премиума и продаж месяца.
+func currentCommission(ctx context.Context, q querier, artistID string, price int64) (int64, error) {
+	premium, err := isPremiumActive(ctx, q, artistID)
+	if err != nil {
+		return 0, err
+	}
+	monthSales, err := artistMonthSales(ctx, q, artistID)
+	if err != nil {
+		return 0, err
+	}
+	return domain.Commission(price, premium, monthSales), nil
 }
 
 func artistMonthSales(ctx context.Context, q querier, artistID string) (int64, error) {
@@ -289,8 +360,9 @@ func (s *Server) orderAction(w http.ResponseWriter, r *http.Request, u httpx.Use
 		return httpx.NotFound("Неизвестное действие")
 	}
 	var in struct {
-		TrackingNumber string `json:"tracking_number"`
-		Reason         string `json:"reason"`
+		TrackingNumber string   `json:"tracking_number"`
+		Reason         string   `json:"reason"`
+		Images         []string `json:"images"` // фото готовой работы (заказ на заказ)
 	}
 	if r.ContentLength != 0 {
 		if err := httpx.Decode(w, r, &in); err != nil {
@@ -305,7 +377,20 @@ func (s *Server) orderAction(w http.ResponseWriter, r *http.Request, u httpx.Use
 	if utf8.RuneCountInString(in.Reason) > 300 {
 		return httpx.Validation(map[string]string{"reason": "Причина — до 300 символов"})
 	}
-	req := transitionReq{orderID: id, action: action, userID: u.ID, tracking: strings.TrimSpace(in.TrackingNumber), reason: strings.TrimSpace(in.Reason)}
+	if len(in.Images) > 0 {
+		if action != domain.ActionShip || len(in.Images) > 10 {
+			return httpx.Validation(map[string]string{"images": "Фото прикладываются при отправке, не больше 10"})
+		}
+		errs, err := s.validateImages(r.Context(), u.ID, in.Images)
+		if err != nil {
+			return err
+		}
+		if errs != nil {
+			return httpx.Validation(errs)
+		}
+	}
+	req := transitionReq{orderID: id, action: action, userID: u.ID, tracking: strings.TrimSpace(in.TrackingNumber),
+		reason: strings.TrimSpace(in.Reason), images: in.Images}
 	if err := s.transition(r.Context(), req); err != nil {
 		return err
 	}
@@ -328,6 +413,7 @@ type transitionReq struct {
 	// статус всё ещё expect и срок действительно истёк (иначе errStale).
 	timeout bool
 	expect  domain.OrderStatus
+	images  []string
 }
 
 // errStale — заказ изменился после выборки воркером; переход пропускается.
@@ -353,17 +439,19 @@ type orderEffects struct {
 	orderID, buyerID, artistID, title string
 	to                                domain.OrderStatus
 	refundPaymentID                   string
+	certificateCode                   string
 }
 
 func (s *Server) transitionTx(ctx context.Context, tx pgx.Tx, req transitionReq) (orderEffects, error) {
 	var e orderEffects
 	var from domain.OrderStatus
-	var artworkID string
+	var artworkID, kind string
 	var price int64
 	var deadline *time.Time
-	err := tx.QueryRow(ctx, `SELECT o.buyer_id, o.artist_id, o.artwork_id, o.status, o.price_kop, o.deadline_at, a.title
+	var shipDays *int
+	err := tx.QueryRow(ctx, `SELECT o.buyer_id, o.artist_id, o.artwork_id, o.status, o.price_kop, o.deadline_at, a.title, o.kind, o.ship_days
 		FROM orders o JOIN artworks a ON a.id = o.artwork_id WHERE o.id = $1 FOR UPDATE OF o`, req.orderID).
-		Scan(&e.buyerID, &e.artistID, &artworkID, &from, &price, &deadline, &e.title)
+		Scan(&e.buyerID, &e.artistID, &artworkID, &from, &price, &deadline, &e.title, &kind, &shipDays)
 	if isNoRows(err) {
 		return e, httpx.NotFound("Заказ не найден")
 	}
@@ -397,38 +485,45 @@ func (s *Server) transitionTx(ctx context.Context, tx pgx.Tx, req transitionReq)
 	case domain.StatusPaid:
 		_, err = tx.Exec(ctx, `UPDATE orders SET status=$2, paid_at=now(), payout_status='held', deadline_at=$3, updated_at=now() WHERE id=$1`, req.orderID, to, next)
 	case domain.StatusConfirmed:
-		_, err = tx.Exec(ctx, `UPDATE orders SET status=$2, confirmed_at=now(), deadline_at=$3, updated_at=now() WHERE id=$1`, req.orderID, to, next)
+		shipBy := domain.ShipDeadline(time.Now(), shipDays)
+		_, err = tx.Exec(ctx, `UPDATE orders SET status=$2, confirmed_at=now(), deadline_at=$3, updated_at=now() WHERE id=$1`, req.orderID, to, shipBy)
 	case domain.StatusShipped:
+		if len(req.images) > 0 && kind != "commission" {
+			return e, httpx.Validation(map[string]string{"images": "Фото при отправке прикладываются к заказу на заказ"})
+		}
 		_, err = tx.Exec(ctx, `UPDATE orders SET status=$2, shipped_at=now(), tracking_number=$4, deadline_at=$3, updated_at=now() WHERE id=$1`, req.orderID, to, next, req.tracking)
+		if err == nil && len(req.images) > 0 {
+			err = replaceImages(ctx, tx, artworkID, req.images)
+		}
 	case domain.StatusCompleted:
-		err = s.completeTx(ctx, tx, req.orderID, e.artistID, artworkID, price)
+		e.certificateCode, err = s.completeTx(ctx, tx, req.orderID, e.artistID, e.buyerID, artworkID, price)
 	case domain.StatusCancelled:
 		err = s.cancelTx(ctx, tx, &e, from, artworkID, actor, req.reason)
 	}
 	return e, err
 }
 
-func (s *Server) completeTx(ctx context.Context, tx pgx.Tx, orderID, artistID, artworkID string, price int64) error {
+// completeTx завершает продажу: комиссия, выплата, статус работы и сертификат подлинности покупателю.
+func (s *Server) completeTx(ctx context.Context, tx pgx.Tx, orderID, artistID, buyerID, artworkID string, price int64) (string, error) {
 	// блокируем художника: параллельные завершения не должны оба уложиться в лимит премиума
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, artistID); err != nil {
-		return err
+		return "", err
 	}
 	// комиссия пересчитывается на момент продажи (лимит премиума — по завершённым продажам месяца)
-	premium, err := isPremiumActive(ctx, tx, artistID)
+	commission, err := currentCommission(ctx, tx, artistID, price)
 	if err != nil {
-		return err
+		return "", err
 	}
-	monthSales, err := artistMonthSales(ctx, tx, artistID)
-	if err != nil {
-		return err
-	}
-	commission := domain.Commission(price, premium, monthSales)
 	if _, err := tx.Exec(ctx, `UPDATE orders SET status='completed', completed_at=now(), commission_kop=$2,
 			payout_status='released', deadline_at=NULL, updated_at=now() WHERE id=$1`, orderID, commission); err != nil {
-		return err
+		return "", err
 	}
-	_, err = tx.Exec(ctx, `UPDATE artworks SET status='sold', updated_at=now() WHERE id=$1`, artworkID)
-	return err
+	// работа на заказ остаётся вне каталога (это личный заказ покупателя)
+	if _, err = tx.Exec(ctx, `UPDATE artworks SET status = CASE WHEN status = 'commission' THEN 'commission' ELSE 'sold' END,
+			updated_at=now() WHERE id=$1`, artworkID); err != nil {
+		return "", err
+	}
+	return issueCertificate(ctx, tx, artworkID, &orderID, buyerID, nil)
 }
 
 // cancelTx отменяет заказ. Возврат денег ставится в очередь (refund_pending) в этой же
@@ -453,7 +548,10 @@ func (s *Server) cancelTx(ctx context.Context, tx pgx.Tx, e *orderEffects, from 
 			deadline_at=NULL, updated_at=now() WHERE id=$1`, e.orderID, reason, payout); err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, `UPDATE artworks SET status='published', updated_at=now() WHERE id=$1 AND status='reserved'`, artworkID)
+	if _, err := tx.Exec(ctx, `UPDATE artworks SET status='published', updated_at=now() WHERE id=$1 AND status='reserved'`, artworkID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE commissions SET status='cancelled', updated_at=now() WHERE order_id=$1 AND status='accepted'`, e.orderID)
 	return err
 }
 
@@ -468,7 +566,7 @@ func defaultCancelReason(actor domain.Actor, from domain.OrderStatus) string {
 	case from == domain.StatusPaid:
 		return "Художник не подтвердил заказ за 24 часа"
 	default:
-		return "Художник не отправил работу за 48 часов"
+		return "Художник не отправил работу в срок"
 	}
 }
 
@@ -488,16 +586,27 @@ func (s *Server) applyEffects(ctx context.Context, e orderEffects) {
 	data := map[string]any{"order_id": e.orderID}
 	switch e.to {
 	case domain.StatusPaid:
-		s.notify(ctx, e.artistID, "order_paid", "Новый заказ", fmt.Sprintf("«%s» оплачена. Подтвердите заказ в течение 24 часов.", e.title), data)
+		s.notify(ctx, e.artistID, "order_paid", tr("Новый заказ", "New order"),
+			tr("«%s» оплачена. Подтвердите заказ в течение 24 часов.", "“%s” has been paid. Confirm the order within 24 hours.", e.title), data)
 	case domain.StatusConfirmed:
-		s.notify(ctx, e.buyerID, "order_confirmed", "Заказ подтверждён", fmt.Sprintf("Художник готовит «%s» к отправке.", e.title), data)
+		s.notify(ctx, e.buyerID, "order_confirmed", tr("Заказ подтверждён", "Order confirmed"),
+			tr("Художник готовит «%s» к отправке.", "The artist is preparing “%s” for shipping.", e.title), data)
 	case domain.StatusShipped:
-		s.notify(ctx, e.buyerID, "order_shipped", "Заказ отправлен", fmt.Sprintf("«%s» в пути. Подтвердите получение, когда заберёте посылку.", e.title), data)
+		s.notify(ctx, e.buyerID, "order_shipped", tr("Заказ отправлен", "Order shipped"),
+			tr("«%s» в пути. Подтвердите получение, когда заберёте посылку.", "“%s” is on its way. Confirm receipt once you pick it up.", e.title), data)
 	case domain.StatusCompleted:
-		s.notify(ctx, e.artistID, "order_completed", "Продажа завершена", fmt.Sprintf("Покупатель получил «%s». Выплата переведена.", e.title), data)
+		s.notify(ctx, e.artistID, "order_completed", tr("Продажа завершена", "Sale completed"),
+			tr("Покупатель получил «%s». Выплата переведена.", "The buyer received “%s”. The payout has been released.", e.title), data)
+		if e.certificateCode != "" {
+			s.notify(ctx, e.buyerID, "certificate_issued", tr("Сертификат подлинности", "Certificate of authenticity"),
+				tr("Сертификат на «%s» готов: %s", "The certificate for “%s” is ready: %s", e.title, e.certificateCode),
+				map[string]any{"certificate_code": e.certificateCode})
+		}
 	case domain.StatusCancelled:
-		s.notify(ctx, e.buyerID, "order_cancelled", "Заказ отменён", fmt.Sprintf("Заказ «%s» отменён.", e.title), data)
-		s.notify(ctx, e.artistID, "order_cancelled", "Заказ отменён", fmt.Sprintf("Заказ «%s» отменён, работа снова в продаже.", e.title), data)
+		s.notify(ctx, e.buyerID, "order_cancelled", tr("Заказ отменён", "Order cancelled"),
+			tr("Заказ «%s» отменён.", "The order for “%s” has been cancelled.", e.title), data)
+		s.notify(ctx, e.artistID, "order_cancelled", tr("Заказ отменён", "Order cancelled"),
+			tr("Заказ «%s» отменён.", "The order for “%s” has been cancelled.", e.title), data)
 	}
 }
 
@@ -567,10 +676,20 @@ type paymentDTO struct {
 	TestMode        bool   `json:"test_mode"`
 }
 
-func (s *Server) createPayment(ctx context.Context, userID, purpose string, orderID *string, amount int64, desc string) (paymentDTO, error) {
+// paymentSpec — что оплачивается.
+type paymentSpec struct {
+	userID, purpose string
+	orderID         *string
+	promotionID     *string
+	amount          int64
+	desc            string
+}
+
+func (s *Server) createPayment(ctx context.Context, p paymentSpec) (paymentDTO, error) {
 	var id string
-	err := s.DB.QueryRow(ctx, `INSERT INTO payments (user_id, purpose, order_id, provider, amount_kop)
-		VALUES ($1,$2,$3,$4,$5) RETURNING id`, userID, purpose, orderID, s.Payments.Name(), amount).Scan(&id)
+	orderID, amount, desc := p.orderID, p.amount, p.desc
+	err := s.DB.QueryRow(ctx, `INSERT INTO payments (user_id, purpose, order_id, promotion_id, provider, amount_kop)
+		VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, p.userID, p.purpose, orderID, p.promotionID, s.Payments.Name(), amount).Scan(&id)
 	if isUniqueViolation(err) && orderID != nil {
 		return s.existingPayment(ctx, *orderID)
 	}
@@ -621,7 +740,7 @@ func (s *Server) payOrder(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	if status != string(domain.StatusAwaitingPayment) {
 		return httpx.Conflict("invalid_transition", "Заказ уже оплачен или отменён")
 	}
-	p, err := s.createPayment(r.Context(), u.ID, "order", &id, total, "Artista: «"+title+"»")
+	p, err := s.createPayment(r.Context(), paymentSpec{userID: u.ID, purpose: "order", orderID: &id, amount: total, desc: "Artista: «" + title + "»"})
 	if err != nil {
 		return err
 	}
@@ -633,7 +752,7 @@ func (s *Server) buySubscription(w http.ResponseWriter, r *http.Request, u httpx
 	if u.Role != "artist" {
 		return httpx.Forbidden("Премиум доступен художникам")
 	}
-	p, err := s.createPayment(r.Context(), u.ID, "subscription", nil, domain.PremiumPriceKop, "Artista Премиум — 30 дней")
+	p, err := s.createPayment(r.Context(), paymentSpec{userID: u.ID, purpose: "subscription", amount: domain.PremiumPriceKop, desc: "Artista Премиум — 30 дней"})
 	if err != nil {
 		return err
 	}
@@ -662,8 +781,8 @@ func (s *Server) stubConfirmPayment(w http.ResponseWriter, r *http.Request, u ht
 // Если заказ уже отменён, деньги ставятся в очередь на возврат.
 func (s *Server) markPaymentSucceeded(ctx context.Context, paymentID, userID string) error {
 	var owner, purpose string
-	var orderID *string
-	err := s.DB.QueryRow(ctx, `SELECT user_id, purpose, order_id FROM payments WHERE id=$1`, paymentID).Scan(&owner, &purpose, &orderID)
+	var orderID, promotionID *string
+	err := s.DB.QueryRow(ctx, `SELECT user_id, purpose, order_id, promotion_id FROM payments WHERE id=$1`, paymentID).Scan(&owner, &purpose, &orderID, &promotionID)
 	if isNoRows(err) || (err == nil && userID != "" && owner != userID) {
 		return httpx.NotFound("Платёж не найден")
 	}
@@ -693,6 +812,12 @@ func (s *Server) markPaymentSucceeded(ctx context.Context, paymentID, userID str
 			_, err := tx.Exec(ctx, `UPDATE users SET premium_until = greatest(coalesce(premium_until, now()), now()) + interval '30 days'
 				WHERE id=$1`, owner)
 			return err
+		}
+		if purpose == "promotion" {
+			if _, err := tx.Exec(ctx, `UPDATE payments SET status='succeeded', updated_at=now() WHERE id=$1`, paymentID); err != nil {
+				return err
+			}
+			return activatePromotion(ctx, tx, *promotionID)
 		}
 		if orderStatus != domain.StatusAwaitingPayment {
 			// оплата пришла после отмены/истечения — деньги нужно вернуть
@@ -769,7 +894,36 @@ func (s *Server) ProcessDeadlines(ctx context.Context) (int, error) {
 	return done, nil
 }
 
-// RunWorker периодически обрабатывает дедлайны и очередь возвратов до отмены ctx.
+// workerJob — периодическая задача воркера.
+type workerJob struct {
+	name string
+	run  func(context.Context) (int, error)
+}
+
+func (s *Server) workerJobs() []workerJob {
+	return []workerJob{
+		{"deadlines", s.ProcessDeadlines},
+		{"refunds", s.ProcessRefunds},
+		{"auctions", s.CloseAuctions},
+		{"exhibitions", s.OpenExhibitions},
+		{"offers", s.ExpireOffers},
+		{"price_locks", s.ReleaseExpiredLocks},
+		{"commissions", s.ExpireCommissions},
+	}
+}
+
+// RunWorkerOnce выполняет все задачи воркера один раз (тесты, ручной запуск).
+func (s *Server) RunWorkerOnce(ctx context.Context) {
+	for _, j := range s.workerJobs() {
+		if n, err := j.run(ctx); err != nil {
+			s.Log.Error("worker job", "job", j.name, "err", err)
+		} else if n > 0 {
+			s.Log.Info("worker job done", "job", j.name, "items", n)
+		}
+	}
+}
+
+// RunWorker периодически выполняет задачи воркера до отмены ctx.
 func (s *Server) RunWorker(ctx context.Context) {
 	t := time.NewTicker(s.Config.WorkerInterval)
 	defer t.Stop()
@@ -778,16 +932,7 @@ func (s *Server) RunWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if n, err := s.ProcessDeadlines(ctx); err != nil {
-				s.Log.Error("process deadlines", "err", err)
-			} else if n > 0 {
-				s.Log.Info("deadlines processed", "orders", n)
-			}
-			if n, err := s.ProcessRefunds(ctx); err != nil {
-				s.Log.Error("process refunds", "err", err)
-			} else if n > 0 {
-				s.Log.Info("refunds processed", "payments", n)
-			}
+			s.RunWorkerOnce(ctx)
 		}
 	}
 }

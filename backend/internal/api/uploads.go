@@ -1,13 +1,15 @@
 package api
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
+	"image"
 	"io"
 	"net/http"
 	"path/filepath"
 
 	"github.com/soslatish/artista/backend/internal/httpx"
+	"github.com/soslatish/artista/backend/internal/palette"
 	"github.com/soslatish/artista/backend/internal/providers"
 )
 
@@ -17,7 +19,25 @@ var imageTypes = map[string]string{
 	"image/webp": "webp",
 }
 
+const (
+	// maxUploadPixels — ограничение разрешения: декодирование большего изображения съест слишком много памяти.
+	maxUploadPixels = 50_000_000
+	// decodeSlots — сколько изображений декодируется одновременно.
+	decodeSlots = 2
+)
+
+// decodeSem ограничивает параллельное декодирование (память).
+var decodeSem = make(chan struct{}, decodeSlots)
+
+type uploadDTO struct {
+	URL     string   `json:"url"`
+	Palette []string `json:"palette"`
+	Width   int      `json:"width"`
+	Height  int      `json:"height"`
+}
+
 // upload принимает изображение (multipart, поле file). Тип определяется по содержимому, а не по имени.
+// Сервер запоминает владельца файла и считает палитру (для поиска по цвету и похожих работ).
 func (s *Server) upload(w http.ResponseWriter, r *http.Request, u httpx.User) error {
 	if !s.uploadLimiter.Allow("upload:" + u.ID) {
 		return httpx.TooMany()
@@ -33,18 +53,56 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, u httpx.User) er
 	}
 	defer file.Close()
 
-	br := bufio.NewReaderSize(file, 512)
-	head, _ := br.Peek(512)
-	ext, ok := imageTypes[http.DetectContentType(head)]
+	data, err := io.ReadAll(io.LimitReader(file, s.Config.MaxUploadBytes+1))
+	if err != nil {
+		return httpx.BadRequest("Не удалось прочитать файл")
+	}
+	if int64(len(data)) > s.Config.MaxUploadBytes {
+		return &httpx.Error{Status: http.StatusRequestEntityTooLarge, Code: "too_large", Message: "Файл больше 10 МБ"}
+	}
+	ext, ok := imageTypes[http.DetectContentType(data)]
 	if !ok {
 		return httpx.Validation(map[string]string{"file": "Поддерживаются JPEG, PNG и WebP"})
 	}
-	url, err := s.Storage.Save(r.Context(), ext, io.LimitReader(br, s.Config.MaxUploadBytes))
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return httpx.Validation(map[string]string{"file": "Файл повреждён или это не изображение"})
+	}
+	if cfg.Width*cfg.Height > maxUploadPixels {
+		return httpx.Validation(map[string]string{"file": "Слишком большое разрешение — до 50 мегапикселей"})
+	}
+	res := s.imagePalette(r, data)
+	if res.Width == 0 {
+		res.Width, res.Height = cfg.Width, cfg.Height
+	}
+	url, err := s.Storage.Save(r.Context(), ext, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
-	httpx.JSON(w, http.StatusCreated, map[string]string{"url": url}, nil)
+	if res.Colors == nil {
+		res.Colors = []string{}
+	}
+	if _, err := s.DB.Exec(r.Context(), `INSERT INTO uploads (url, user_id, palette, width, height) VALUES ($1, $2, $3, $4, $5)`,
+		url, u.ID, res.Colors, res.Width, res.Height); err != nil {
+		return err
+	}
+	httpx.JSON(w, http.StatusCreated, uploadDTO{URL: url, Palette: res.Colors, Width: res.Width, Height: res.Height}, nil)
 	return nil
+}
+
+// imagePalette считает палитру; ошибка декодирования не мешает загрузке (палитра будет пустой).
+func (s *Server) imagePalette(r *http.Request, data []byte) palette.Result {
+	select {
+	case decodeSem <- struct{}{}:
+	case <-r.Context().Done():
+		return palette.Result{}
+	}
+	defer func() { <-decodeSem }()
+	res, err := palette.FromReader(bytes.NewReader(data))
+	if err != nil {
+		s.Log.Warn("palette", "err", err)
+	}
+	return res
 }
 
 // serveFile раздаёт загруженные файлы (только имена, сгенерированные сервером).

@@ -6,7 +6,9 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/golang-jwt/jwt/v5 v5.2.3
 	github.com/jackc/pgx/v5 v5.7.5
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/crypto v0.39.0
+	golang.org/x/image v0.28.0
 )
 
 require (
@@ -29,3 +31,5 @@ replace (
 	gopkg.in/check.v1 => github.com/go-check/check v0.0.0-20201130134442-10cb98267c6c
 	gopkg.in/yaml.v3 => github.com/go-yaml/yaml v0.0.0-20220527083530-f6f7691b1fde
 )
+
+replace golang.org/x/image => github.com/golang/image v0.28.0

@@ -31,7 +31,9 @@ type Deps struct {
 	Pusher   providers.Pusher
 	Mailer   providers.Mailer
 	Storage  providers.Storage
-	Log      *slog.Logger
+	// Assistant — генерация текстов карточки (по умолчанию шаблонизатор без нейросети)
+	Assistant providers.Assistant
+	Log       *slog.Logger
 }
 
 // Server — HTTP API.
@@ -42,6 +44,8 @@ type Server struct {
 	apiLimiter     *httpx.RateLimiter
 	accountLimiter *httpx.RateLimiter // попытки входа по одному e-mail
 	uploadLimiter  *httpx.RateLimiter // загрузки файлов одним пользователем
+	socialLimiter  *httpx.RateLimiter // вопросы и посты одного пользователя
+	aiLimiter      *httpx.RateLimiter // запросы к ИИ-помощнику
 	active         *activeCache
 	bg             sync.WaitGroup // фоновые задачи (воркер, рассылки) — ждём при остановке
 }
@@ -50,10 +54,15 @@ const (
 	loginAttemptsPerAccount = 10
 	loginWindow             = 15 * time.Minute
 	uploadsPerUserHour      = 60
+	socialPerUserHour       = 30
+	aiPerUserHour           = 30
 )
 
 // New создаёт сервер.
 func New(d Deps) *Server {
+	if d.Assistant == nil {
+		d.Assistant = providers.TemplateAssistant{}
+	}
 	return &Server{
 		Deps:           d,
 		hub:            NewHub(),
@@ -61,6 +70,8 @@ func New(d Deps) *Server {
 		apiLimiter:     httpx.NewRateLimiter(positive(d.Config.APIRatePerMin, 600), time.Minute),
 		accountLimiter: httpx.NewRateLimiter(loginAttemptsPerAccount, loginWindow),
 		uploadLimiter:  httpx.NewRateLimiter(uploadsPerUserHour, time.Hour),
+		socialLimiter:  httpx.NewRateLimiter(socialPerUserHour, time.Hour),
+		aiLimiter:      httpx.NewRateLimiter(aiPerUserHour, time.Hour),
 		active:         newActiveCache(30 * time.Second),
 	}
 }
@@ -191,11 +202,24 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+v+"/me/subscription", s.authed(s.buySubscription))
 	mux.HandleFunc("GET "+v+"/me/artworks", s.authed(s.myArtworks))
 	mux.HandleFunc("GET "+v+"/me/favorites", s.authed(s.myFavorites))
+	mux.HandleFunc("GET "+v+"/me/history", s.authed(s.myHistory))
+	mux.HandleFunc("DELETE "+v+"/me/history", s.authed(s.clearHistory))
+	mux.HandleFunc("GET "+v+"/me/saved-searches", s.authed(s.listSavedSearches))
+	mux.HandleFunc("POST "+v+"/me/saved-searches", s.authed(s.createSavedSearch))
+	mux.HandleFunc("DELETE "+v+"/me/saved-searches/{id}", s.authed(s.deleteSavedSearch))
+	mux.HandleFunc("GET "+v+"/me/stats/detailed", s.authed(s.detailedStats))
+	mux.HandleFunc("GET "+v+"/me/promotions", s.authed(s.myPromotions))
+	mux.HandleFunc("GET "+v+"/me/certificates", s.authed(s.myCertificates))
+	mux.HandleFunc("POST "+v+"/me/series", s.authed(s.createSeries))
+	mux.HandleFunc("PATCH "+v+"/me/series/{id}", s.authed(s.updateSeries))
+	mux.HandleFunc("DELETE "+v+"/me/series/{id}", s.authed(s.deleteSeries))
 
 	// Пользователи
 	mux.HandleFunc("GET "+v+"/users/{id}", s.h(s.getUser))
 	mux.HandleFunc("GET "+v+"/users/{id}/artworks", s.h(s.userArtworks))
 	mux.HandleFunc("GET "+v+"/users/{id}/reviews", s.h(s.userReviews))
+	mux.HandleFunc("GET "+v+"/users/{id}/series", s.h(s.userSeries))
+	mux.HandleFunc("GET "+v+"/users/{id}/posts", s.h(s.userPosts))
 	mux.HandleFunc("POST "+v+"/users/{id}/follow", s.authed(s.follow))
 	mux.HandleFunc("DELETE "+v+"/users/{id}/follow", s.authed(s.unfollow))
 
@@ -209,6 +233,18 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+v+"/artworks/{id}/publish", s.authed(s.publishArtwork))
 	mux.HandleFunc("POST "+v+"/artworks/{id}/favorite", s.authed(s.addFavorite))
 	mux.HandleFunc("DELETE "+v+"/artworks/{id}/favorite", s.authed(s.removeFavorite))
+	mux.HandleFunc("GET "+v+"/artworks/{id}/similar", s.h(s.similarArtworks))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/similar-alert", s.authed(s.similarAlert))
+	mux.HandleFunc("GET "+v+"/artworks/{id}/questions", s.h(s.listQuestions))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/questions", s.authed(s.askQuestion))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/offers", s.authed(s.createOffer))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/auction", s.authed(s.startAuction))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/promote", s.authed(s.promoteArtwork))
+	mux.HandleFunc("POST "+v+"/questions/{id}/answer", s.authed(s.answerQuestion))
+	mux.HandleFunc("DELETE "+v+"/questions/{id}", s.authed(s.deleteQuestion))
+	mux.HandleFunc("POST "+v+"/assistant/artwork", s.authed(s.artworkAssistant))
+	mux.HandleFunc("GET "+v+"/collections", s.h(s.listCollections))
+	mux.HandleFunc("GET "+v+"/collections/{slug}", s.h(s.getCollection))
 	mux.HandleFunc("POST "+v+"/uploads", s.authed(s.upload))
 	mux.HandleFunc("GET "+v+"/delivery/quote", s.h(s.deliveryQuote))
 
@@ -221,6 +257,37 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+v+"/orders/{id}/review", s.authed(s.createReview))
 	mux.HandleFunc("POST "+v+"/payments/{id}/stub-confirm", s.authed(s.stubConfirmPayment))
 	mux.HandleFunc("POST "+v+"/webhooks/payments", s.h(s.paymentWebhook))
+
+	// Торг, аукционы, заказы на заказ
+	mux.HandleFunc("GET "+v+"/offers", s.authed(s.listOffers))
+	mux.HandleFunc("GET "+v+"/offers/{id}", s.authed(s.getOffer))
+	mux.HandleFunc("POST "+v+"/offers/{id}/{action}", s.authed(s.offerAction))
+	mux.HandleFunc("GET "+v+"/auctions/{id}", s.h(s.getAuction))
+	mux.HandleFunc("POST "+v+"/auctions/{id}/bids", s.authed(s.placeBid))
+	mux.HandleFunc("POST "+v+"/auctions/{id}/cancel", s.authed(s.cancelAuction))
+	mux.HandleFunc("POST "+v+"/commissions", s.authed(s.createCommission))
+	mux.HandleFunc("GET "+v+"/commissions", s.authed(s.listCommissions))
+	mux.HandleFunc("GET "+v+"/commissions/{id}", s.authed(s.getCommission))
+	mux.HandleFunc("POST "+v+"/commissions/{id}/{action}", s.authed(s.commissionAction))
+
+	// Сертификаты подлинности
+	mux.HandleFunc("GET "+v+"/certificates/{code}", s.h(s.getCertificate))
+	mux.HandleFunc("GET "+v+"/certificates/{code}/qr.png", s.certificateQR)
+	mux.HandleFunc("POST "+v+"/certificates/{code}/transfer", s.authed(s.transferCertificate))
+
+	// Посты и выставки
+	mux.HandleFunc("GET "+v+"/feed/posts", s.h(s.postsFeed))
+	mux.HandleFunc("POST "+v+"/posts", s.authed(s.createPost))
+	mux.HandleFunc("DELETE "+v+"/posts/{id}", s.authed(s.deletePost))
+	mux.HandleFunc("POST "+v+"/posts/{id}/like", s.authed(s.likePost))
+	mux.HandleFunc("DELETE "+v+"/posts/{id}/like", s.authed(s.unlikePost))
+	mux.HandleFunc("GET "+v+"/exhibitions", s.h(s.listExhibitions))
+	mux.HandleFunc("POST "+v+"/exhibitions", s.authed(s.createExhibition))
+	mux.HandleFunc("GET "+v+"/exhibitions/{id}", s.h(s.getExhibition))
+	mux.HandleFunc("PATCH "+v+"/exhibitions/{id}", s.authed(s.updateExhibition))
+	mux.HandleFunc("POST "+v+"/exhibitions/{id}/cancel", s.authed(s.cancelExhibition))
+	mux.HandleFunc("POST "+v+"/exhibitions/{id}/remind", s.authed(s.remindExhibition))
+	mux.HandleFunc("DELETE "+v+"/exhibitions/{id}/remind", s.authed(s.unremindExhibition))
 
 	// Чат и уведомления
 	mux.HandleFunc("GET "+v+"/conversations", s.authed(s.listConversations))
@@ -236,6 +303,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+v+"/reports", s.authed(s.createReport))
 	mux.HandleFunc("GET "+v+"/admin/reports", s.adminOnly(s.listReports))
 	mux.HandleFunc("POST "+v+"/admin/reports/{id}/resolve", s.adminOnly(s.resolveReport))
+	mux.HandleFunc("GET "+v+"/admin/collections", s.adminOnly(s.adminListCollections))
+	mux.HandleFunc("POST "+v+"/admin/collections", s.adminOnly(s.adminCreateCollection))
+	mux.HandleFunc("PATCH "+v+"/admin/collections/{id}", s.adminOnly(s.adminUpdateCollection))
+	mux.HandleFunc("DELETE "+v+"/admin/collections/{id}", s.adminOnly(s.adminDeleteCollection))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) error {

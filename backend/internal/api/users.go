@@ -36,15 +36,23 @@ type meDTO struct {
 	Social       map[string]string `json:"social"`
 	IsPremium    bool              `json:"is_premium"`
 	PremiumUntil *time.Time        `json:"premium_until"`
-	CreatedAt    time.Time         `json:"created_at"`
+	// VacationUntil — магазин на паузе до этой даты (работы видны, купить нельзя)
+	VacationUntil      *time.Time `json:"vacation_until"`
+	VacationNote       string     `json:"vacation_note"`
+	AcceptsCommissions bool       `json:"accepts_commissions"`
+	CommissionNote     string     `json:"commission_note"`
+	Locale             string     `json:"locale"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 func loadMe(ctx context.Context, q querier, id string) (meDTO, error) {
 	var m meDTO
 	err := q.QueryRow(ctx, `SELECT id, email, name, role, city, bio, avatar_url, social, premium_until,
-			coalesce(premium_until > now(), false), created_at
+			coalesce(premium_until > now(), false), CASE WHEN vacation_until > now() THEN vacation_until END,
+			vacation_note, accepts_commissions, commission_note, locale, created_at
 		FROM users WHERE id = $1 AND deleted_at IS NULL`, id).
-		Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.City, &m.Bio, &m.AvatarURL, &m.Social, &m.PremiumUntil, &m.IsPremium, &m.CreatedAt)
+		Scan(&m.ID, &m.Email, &m.Name, &m.Role, &m.City, &m.Bio, &m.AvatarURL, &m.Social, &m.PremiumUntil, &m.IsPremium,
+			&m.VacationUntil, &m.VacationNote, &m.AcceptsCommissions, &m.CommissionNote, &m.Locale, &m.CreatedAt)
 	if isNoRows(err) {
 		return meDTO{}, httpx.Unauthorized("Аккаунт не найден")
 	}
@@ -69,11 +77,33 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u httpx.User) 
 		Bio       *string            `json:"bio"`
 		AvatarURL *string            `json:"avatar_url"`
 		Social    *map[string]string `json:"social"`
+		// VacationUntil: RFC 3339 — включить паузу до даты, "" — выключить
+		VacationUntil      *string `json:"vacation_until"`
+		VacationNote       *string `json:"vacation_note"`
+		AcceptsCommissions *bool   `json:"accepts_commissions"`
+		CommissionNote     *string `json:"commission_note"`
+		Locale             *string `json:"locale"`
 	}
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
 	errs := map[string]string{}
+	vacation, clearVacation, vErr := parseVacation(in.VacationUntil)
+	if vErr != "" {
+		errs["vacation_until"] = vErr
+	}
+	if in.VacationNote != nil && utf8.RuneCountInString(*in.VacationNote) > 200 {
+		errs["vacation_note"] = "Сообщение — до 200 символов"
+	}
+	if in.CommissionNote != nil && utf8.RuneCountInString(*in.CommissionNote) > 500 {
+		errs["commission_note"] = "Условия — до 500 символов"
+	}
+	if in.Locale != nil && *in.Locale != "ru" && *in.Locale != "en" {
+		errs["locale"] = "Язык: ru или en"
+	}
+	if (in.AcceptsCommissions != nil || in.VacationUntil != nil) && u.Role != "artist" {
+		errs["role"] = "Доступно художникам"
+	}
 	if in.Name != nil {
 		if n := utf8.RuneCountInString(strings.TrimSpace(*in.Name)); n < 1 || n > 80 {
 			errs["name"] = "Укажите имя (до 80 символов)"
@@ -104,9 +134,13 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	}
 	_, err := s.DB.Exec(r.Context(), `UPDATE users SET
 			name = coalesce($2, name), city = coalesce($3, city), bio = coalesce($4, bio),
-			avatar_url = coalesce($5, avatar_url), social = coalesce($6::jsonb, social), updated_at = now()
+			avatar_url = coalesce($5, avatar_url), social = coalesce($6::jsonb, social),
+			vacation_until = CASE WHEN $7 THEN NULL ELSE coalesce($8, vacation_until) END,
+			vacation_note = coalesce($9, vacation_note), accepts_commissions = coalesce($10, accepts_commissions),
+			commission_note = coalesce($11, commission_note), locale = coalesce($12, locale), updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL`,
-		u.ID, trimPtr(in.Name), trimPtr(in.City), in.Bio, in.AvatarURL, nullableJSON(socialJSON))
+		u.ID, trimPtr(in.Name), trimPtr(in.City), in.Bio, in.AvatarURL, nullableJSON(socialJSON),
+		clearVacation, vacation, trimPtr(in.VacationNote), in.AcceptsCommissions, trimPtr(in.CommissionNote), in.Locale)
 	if err != nil {
 		return err
 	}
@@ -278,7 +312,15 @@ type userDTO struct {
 	Followers    int               `json:"followers"`
 	ArtworkCount int               `json:"artworks_count"`
 	IsFollowing  bool              `json:"is_following"`
-	CreatedAt    time.Time         `json:"created_at"`
+	// пауза магазина и приём заказов на заказ
+	OnVacation         bool       `json:"on_vacation"`
+	VacationUntil      *time.Time `json:"vacation_until"`
+	VacationNote       string     `json:"vacation_note"`
+	AcceptsCommissions bool       `json:"accepts_commissions"`
+	CommissionNote     string     `json:"commission_note"`
+	SeriesCount        int        `json:"series_count"`
+	PostsCount         int        `json:"posts_count"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
@@ -295,10 +337,17 @@ func (s *Server) getUser(w http.ResponseWriter, r *http.Request) error {
 			(SELECT count(*) FROM follows WHERE artist_id = u.id),
 			(SELECT count(*) FROM artworks WHERE artist_id = u.id AND status IN ('published','reserved')),
 			EXISTS(SELECT 1 FROM follows WHERE artist_id = u.id AND follower_id = $2::uuid),
+			coalesce(u.vacation_until > now(), false), CASE WHEN u.vacation_until > now() THEN u.vacation_until END,
+			CASE WHEN u.vacation_until > now() THEN u.vacation_note ELSE '' END,
+			u.accepts_commissions AND u.role = 'artist', u.commission_note,
+			(SELECT count(*) FROM series WHERE artist_id = u.id),
+			(SELECT count(*) FROM posts WHERE artist_id = u.id AND hidden_at IS NULL),
 			u.created_at
 		FROM users u WHERE u.id = $1 AND u.deleted_at IS NULL AND u.banned_at IS NULL`, id, nullableID(viewer.ID)).
 		Scan(&d.ID, &d.Name, &d.Role, &d.City, &d.Bio, &d.AvatarURL, &d.Social, &d.IsPremium, &d.Rating,
-			&d.ReviewsCount, &d.Followers, &d.ArtworkCount, &d.IsFollowing, &d.CreatedAt)
+			&d.ReviewsCount, &d.Followers, &d.ArtworkCount, &d.IsFollowing,
+			&d.OnVacation, &d.VacationUntil, &d.VacationNote, &d.AcceptsCommissions, &d.CommissionNote,
+			&d.SeriesCount, &d.PostsCount, &d.CreatedAt)
 	if isNoRows(err) {
 		return httpx.NotFound("Пользователь не найден")
 	}
@@ -374,6 +423,46 @@ func nullableJSON(b []byte) any {
 	}
 	return string(b)
 }
+
+// maxVacation — пауза магазина не дольше 90 дней.
+const maxVacation = 90 * 24 * time.Hour
+
+// parseVacation: nil — не менять; "" — выключить; иначе дата в будущем, не дальше 90 дней.
+func parseVacation(raw *string) (until *time.Time, clear bool, problem string) {
+	if raw == nil {
+		return nil, false, ""
+	}
+	if *raw == "" {
+		return nil, true, ""
+	}
+	t, err := time.Parse(time.RFC3339, *raw)
+	if err != nil {
+		return nil, false, "Некорректная дата"
+	}
+	if !t.After(time.Now()) || t.After(time.Now().Add(maxVacation)) {
+		return nil, false, "Пауза — от сегодняшнего дня до 90 дней"
+	}
+	return &t, false, ""
+}
+
+// artistOnVacation — художник поставил магазин на паузу (покупки, предложения и заказы недоступны).
+func artistOnVacation(ctx context.Context, q querier, artistID string) (bool, *time.Time, error) {
+	var until *time.Time
+	err := q.QueryRow(ctx, `SELECT CASE WHEN vacation_until > now() THEN vacation_until END FROM users WHERE id = $1`, artistID).Scan(&until)
+	return until != nil, until, err
+}
+
+// vacationError — ответ, когда художник на паузе.
+func vacationError(until *time.Time) error {
+	msg := "Художник взял паузу и сейчас не принимает заказы"
+	if until != nil {
+		msg += " — до " + until.In(moscow).Format("02.01.2006")
+	}
+	return httpx.Conflict("artist_on_vacation", msg)
+}
+
+// moscow — часовой пояс для дат в сообщениях (без tzdata в контейнере — фиксированный UTC+3).
+var moscow = time.FixedZone("MSK", 3*60*60)
 
 // isPremiumActive — проверка премиума внутри транзакции.
 func isPremiumActive(ctx context.Context, q querier, userID string) (bool, error) {

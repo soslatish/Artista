@@ -3,9 +3,12 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/soslatish/artista/backend/internal/domain"
 	"github.com/soslatish/artista/backend/internal/httpx"
 )
 
@@ -34,69 +37,182 @@ func (b *queryBuilder) sql() string {
 	return "WHERE " + strings.Join(b.where, " AND ")
 }
 
-// Сортировки — только из белого списка.
+// catalogStatuses — работы, которые можно купить или на которые можно сделать ставку.
+const catalogStatuses = "a.status IN ('published','auction')"
+
+// publicStatuses — работы, которые видны всем (в том числе проданные и анонсы выставок).
+const publicStatuses = "a.status IN ('published','reserved','sold','scheduled','auction')"
+
+// Сортировки — только из белого списка. Продвигаемые работы идут первыми в лентах,
+// но не в сортировках по цене.
 var sorts = map[string]string{
-	"new":        "a.published_at DESC NULLS LAST, a.id DESC",
+	"new":        "is_promoted DESC, a.published_at DESC NULLS LAST, a.id DESC",
 	"price_asc":  "a.price_kop ASC, a.id DESC",
 	"price_desc": "a.price_kop DESC, a.id DESC",
-	"popular": `(coalesce(u.premium_until > now(), false)) DESC,
+	"popular": `is_promoted DESC, (coalesce(u.premium_until > now(), false)) DESC,
 		(a.views + 5 * (SELECT count(*) FROM favorites f WHERE f.artwork_id = a.id)) DESC, a.id DESC`,
+	"ending": "au.ends_at ASC NULLS LAST, a.id DESC",
 }
 
-// listArtworks — каталог с поиском, фильтрами и лентами.
-func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
-	q := r.URL.Query()
-	viewer, _ := s.userFromRequest(r)
-	p := parsePage(r)
+// catalogFilter — фильтры каталога. Тот же формат хранится в сохранённых поисках и подборках.
+type catalogFilter struct {
+	Q          string   `json:"q,omitempty"`
+	Category   string   `json:"category,omitempty"`
+	Style      string   `json:"style,omitempty"`
+	Technique  string   `json:"technique,omitempty"`
+	City       string   `json:"city,omitempty"`
+	Colors     []string `json:"colors,omitempty"`
+	Room       string   `json:"room,omitempty"`
+	PriceMin   *int64   `json:"price_min,omitempty"`
+	PriceMax   *int64   `json:"price_max,omitempty"`
+	SizeMax    *float64 `json:"size_max,omitempty"`
+	NewArtists bool     `json:"new_artists,omitempty"`
+	Auction    bool     `json:"auction,omitempty"`
+	// ArtistID — только для запроса каталога, в сохранённые поиски не попадает
+	ArtistID string `json:"-"`
+}
 
-	b := &queryBuilder{}
-	b.arg(nullableID(viewer.ID)) // $1 — зритель для is_favorite
-	b.add("a.status = 'published'")
-	b.add("u.deleted_at IS NULL")
+const maxQueryLen = 100
 
-	if text := strings.TrimSpace(q.Get("q")); text != "" {
-		if len([]rune(text)) > 100 {
-			return httpx.BadRequest("Слишком длинный запрос")
-		}
-		like := "%" + escapeLike(text) + "%"
-		b.add("(a.search @@ plainto_tsquery('russian', ?) OR a.title ILIKE ? OR u.name ILIKE ?)", text, like, like)
+// parseCatalogFilter читает фильтры из query string.
+func parseCatalogFilter(q url.Values) (catalogFilter, error) {
+	f := catalogFilter{
+		Q:          strings.TrimSpace(q.Get("q")),
+		Category:   q.Get("category"),
+		Style:      q.Get("style"),
+		Technique:  q.Get("technique"),
+		City:       strings.TrimSpace(q.Get("city")),
+		Room:       q.Get("room"),
+		NewArtists: q.Get("new_artists") == "true",
+		Auction:    q.Get("auction") == "true",
+		ArtistID:   q.Get("artist_id"),
 	}
-	for _, f := range []struct{ param, col string }{
-		{"category", "a.category"}, {"style", "a.style"}, {"technique", "a.technique"},
-	} {
-		if v := q.Get(f.param); v != "" {
-			b.add(f.col+" = ?", v)
-		}
+	if f.ArtistID != "" && !isUUID(f.ArtistID) {
+		return f, httpx.BadRequest("Некорректный artist_id")
 	}
-	if v := q.Get("city"); v != "" {
-		b.add("lower(u.city) = lower(?)", strings.TrimSpace(v))
+	if v := q.Get("colors"); v != "" {
+		f.Colors = strings.Split(v, ",")
 	}
-	if v := q.Get("artist_id"); v != "" {
-		if !isUUID(v) {
-			return httpx.BadRequest("Некорректный artist_id")
-		}
-		b.add("a.artist_id = ?", v)
+	var err error
+	if f.PriceMin, err = parseKop(q.Get("price_min")); err != nil {
+		return f, err
 	}
-	if err := addRange(b, q.Get("price_min"), "a.price_kop >= ?"); err != nil {
-		return err
-	}
-	if err := addRange(b, q.Get("price_max"), "a.price_kop <= ?"); err != nil {
-		return err
+	if f.PriceMax, err = parseKop(q.Get("price_max")); err != nil {
+		return f, err
 	}
 	if v := q.Get("size_max"); v != "" {
 		n, err := strconv.ParseFloat(v, 64)
-		if err != nil || n <= 0 {
-			return httpx.BadRequest("Некорректный size_max")
+		if err != nil || n <= 0 || n > 10_000 {
+			return f, httpx.BadRequest("Некорректный size_max")
 		}
-		b.add("greatest(a.width_cm, a.height_cm, a.depth_cm) <= ?", n)
+		f.SizeMax = &n
 	}
+	return f, f.validate()
+}
 
-	sortKey := q.Get("sort")
-	switch q.Get("feed") {
+func parseKop(raw string) (*int64, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || n < 0 {
+		return nil, httpx.BadRequest("Некорректный диапазон цены")
+	}
+	return &n, nil
+}
+
+// validate проверяет значения из справочников (в том числе для фильтров из JSON).
+func (f catalogFilter) validate() error {
+	if utf8.RuneCountInString(f.Q) > maxQueryLen || utf8.RuneCountInString(f.City) > 80 {
+		return httpx.BadRequest("Слишком длинный запрос")
+	}
+	if f.Category != "" && !domain.IsValidCategory(f.Category) {
+		return httpx.BadRequest("Неизвестная категория")
+	}
+	if f.Style != "" && !domain.IsValidStyle(f.Style) {
+		return httpx.BadRequest("Неизвестный стиль")
+	}
+	if f.Technique != "" && !domain.IsValidTechnique(f.Technique) {
+		return httpx.BadRequest("Неизвестная техника")
+	}
+	if f.Room != "" && !domain.IsRoom(f.Room) {
+		return httpx.BadRequest("Неизвестный интерьер")
+	}
+	if len(f.Colors) > 5 {
+		return httpx.BadRequest("Выберите не больше пяти цветов")
+	}
+	for _, c := range f.Colors {
+		if !domain.IsColor(c) {
+			return httpx.BadRequest("Неизвестный цвет")
+		}
+	}
+	if (f.PriceMin != nil && *f.PriceMin < 0) || (f.PriceMax != nil && *f.PriceMax < 0) {
+		return httpx.BadRequest("Некорректный диапазон цены")
+	}
+	return nil
+}
+
+// isEmpty — ни одного условия (сохранять такой поиск бессмысленно).
+func (f catalogFilter) isEmpty() bool {
+	return f.Q == "" && f.Category == "" && f.Style == "" && f.Technique == "" && f.City == "" &&
+		len(f.Colors) == 0 && f.Room == "" && f.PriceMin == nil && f.PriceMax == nil && f.SizeMax == nil &&
+		!f.NewArtists && !f.Auction
+}
+
+// apply добавляет условия фильтра к запросу.
+func (f catalogFilter) apply(b *queryBuilder) {
+	if f.Q != "" {
+		like := "%" + escapeLike(f.Q) + "%"
+		b.add("(a.search @@ plainto_tsquery('russian', ?) OR a.title ILIKE ? OR u.name ILIKE ?)", f.Q, like, like)
+	}
+	for _, c := range []struct{ val, col string }{
+		{f.Category, "a.category"}, {f.Style, "a.style"}, {f.Technique, "a.technique"},
+	} {
+		if c.val != "" {
+			b.add(c.col+" = ?", c.val)
+		}
+	}
+	if f.City != "" {
+		b.add("lower(u.city) = lower(?)", f.City)
+	}
+	if len(f.Colors) > 0 {
+		b.add("a.palette && ?::text[]", f.Colors)
+	}
+	if f.Room != "" {
+		b.add("? = ANY(a.rooms)", f.Room)
+	}
+	if f.PriceMin != nil {
+		b.add("a.price_kop >= ?", *f.PriceMin)
+	}
+	if f.PriceMax != nil {
+		b.add("a.price_kop <= ?", *f.PriceMax)
+	}
+	if f.SizeMax != nil {
+		b.add("greatest(a.width_cm, a.height_cm, a.depth_cm) <= ?", *f.SizeMax)
+	}
+	if f.NewArtists {
+		b.add("u.created_at > now() - interval '60 days'")
+	}
+	if f.Auction {
+		b.add("a.status = 'auction'")
+	}
+	if f.ArtistID != "" {
+		b.add("a.artist_id = ?", f.ArtistID)
+	}
+}
+
+// catalogQuery собирает запрос к каталогу: фильтр, лента, сортировка, страница.
+func catalogQuery(viewerID string, f catalogFilter, feed, sortKey string, p page) (string, []any) {
+	b := &queryBuilder{}
+	b.arg(nullableID(viewerID)) // $1 — зритель для is_favorite
+	b.add(catalogStatuses)
+	b.add("u.deleted_at IS NULL AND u.banned_at IS NULL")
+	f.apply(b)
+	switch feed {
 	case "popular":
 		sortKey = "popular"
 	case "for_you":
-		if viewer.ID != "" {
+		if viewerID != "" {
 			// подписки и категории из избранного; если ничего нет — популярное
 			b.add(`((NOT EXISTS (SELECT 1 FROM follows WHERE follower_id = $1::uuid)
 				  AND NOT EXISTS (SELECT 1 FROM favorites WHERE user_id = $1::uuid))
@@ -112,8 +228,20 @@ func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		order = sorts["new"]
 	}
-	sql := fmt.Sprintf("%s %s ORDER BY %s LIMIT %d OFFSET %d", artworkSelect, b.sql(), order, p.limit, p.offset)
-	rows, err := s.DB.Query(r.Context(), sql, b.args...)
+	return fmt.Sprintf("%s %s ORDER BY %s LIMIT %d OFFSET %d", artworkSelect, b.sql(), order, p.limit, p.offset), b.args
+}
+
+// listArtworks — каталог с поиском, фильтрами и лентами.
+func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
+	q := r.URL.Query()
+	viewer, _ := s.userFromRequest(r)
+	f, err := parseCatalogFilter(q)
+	if err != nil {
+		return err
+	}
+	p := parsePage(r)
+	sql, args := catalogQuery(viewer.ID, f, q.Get("feed"), q.Get("sort"), p)
+	rows, err := s.DB.Query(r.Context(), sql, args...)
 	if err != nil {
 		return err
 	}
@@ -122,18 +250,6 @@ func (s *Server) listArtworks(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	httpx.JSON(w, http.StatusOK, items, p.meta(len(items)))
-	return nil
-}
-
-func addRange(b *queryBuilder, raw, cond string) error {
-	if raw == "" {
-		return nil
-	}
-	n, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || n < 0 {
-		return httpx.BadRequest("Некорректный диапазон цены")
-	}
-	b.add(cond, n)
 	return nil
 }
 
@@ -157,31 +273,41 @@ func (s *Server) listByCondition(w http.ResponseWriter, r *http.Request, viewerI
 	return nil
 }
 
-// myArtworks — все работы художника, кроме скрытых модератором (?status= фильтр).
+var artistStatuses = map[string]bool{
+	"draft": true, "published": true, "reserved": true, "sold": true, "archived": true,
+	"hidden": true, "scheduled": true, "auction": true, "commission": true,
+}
+
+// myArtworks — все работы художника (?status= фильтр).
 func (s *Server) myArtworks(w http.ResponseWriter, r *http.Request, u httpx.User) error {
 	status := r.URL.Query().Get("status")
 	if status != "" {
-		switch status {
-		case "draft", "published", "reserved", "sold", "archived", "hidden":
-		default:
+		if !artistStatuses[status] {
 			return httpx.BadRequest("Некорректный статус")
 		}
 		return s.listByCondition(w, r, u.ID, "a.artist_id = $2 AND a.status = $3", u.ID, status)
 	}
-	return s.listByCondition(w, r, u.ID, "a.artist_id = $2", u.ID)
+	return s.listByCondition(w, r, u.ID, "a.artist_id = $2 AND a.status <> 'commission'", u.ID)
 }
 
 func (s *Server) myFavorites(w http.ResponseWriter, r *http.Request, u httpx.User) error {
 	return s.listByCondition(w, r, u.ID,
-		"a.id IN (SELECT artwork_id FROM favorites WHERE user_id = $2) AND a.status IN ('published','reserved','sold')", u.ID)
+		"a.id IN (SELECT artwork_id FROM favorites WHERE user_id = $2) AND "+publicStatuses, u.ID)
 }
 
+// userArtworks — работы художника в профиле (?series_id= — работы серии).
 func (s *Server) userArtworks(w http.ResponseWriter, r *http.Request) error {
 	id, err := pathID(r, "id")
 	if err != nil {
 		return err
 	}
 	viewer, _ := s.userFromRequest(r)
-	return s.listByCondition(w, r, viewer.ID,
-		"a.artist_id = $2 AND a.status IN ('published','reserved','sold') AND u.deleted_at IS NULL", id)
+	cond := "a.artist_id = $2 AND " + publicStatuses + " AND u.deleted_at IS NULL"
+	if sid := r.URL.Query().Get("series_id"); sid != "" {
+		if !isUUID(sid) {
+			return httpx.BadRequest("Некорректный series_id")
+		}
+		return s.listByCondition(w, r, viewer.ID, cond+" AND a.series_id = $3", id, sid)
+	}
+	return s.listByCondition(w, r, viewer.ID, cond, id)
 }
