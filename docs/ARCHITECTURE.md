@@ -60,9 +60,24 @@ backend/
 | reviews | order_id uniq, author_id, artist_id, rating 1–5, text |
 | notifications | user_id, type, title, body, data jsonb, read_at |
 | device_tokens | user_id, token, platform |
-| reports | reporter_id, target_type, target_id, reason, status |
+| reports | reporter_id, target_type (artwork/user/message/question/post), target_id, reason, status |
+| uploads | url, owner_id, palette — владелец файла и цвета обложки; чужие файлы в работах не принимаются |
+| artwork_views | artwork_id, viewer_id, source, created_at — история, «похожие», источники в статистике |
+| saved_searches | user_id, title, filters jsonb, notified_at |
+| collections / collection_items | slug, title, kind (manual/filter), filters jsonb |
+| series | artist_id, title, description, position; artworks.series_id |
+| offers | artwork_id, buyer_id, amount_kop, counter_kop, status, expires_at |
+| price_locks | artwork_id, user_id, price_kop, source (offer/auction), expires_at, used_at — применяется при заказе |
+| auctions / bids | artwork_id, start_kop, step_kop, current_kop, leader_id, ends_at, status; bidder_id, amount_kop |
+| commissions | buyer_id, artist_id, description, размеры, budget_kop, images, quote_kop, quote_days, order_id |
+| certificates | code uniq, artwork_id, order_id, owner_id, status (active/transferred), previous_id |
+| exhibitions / exhibition_reminders | artist_id, title, starts_at, opened_at, cancelled_at; artworks.exhibition_id |
+| posts / post_likes, artwork_questions | лента мастерских и вопросы о работе |
+| promotions | artwork_id, days, price_kop, status, starts_at, ends_at; оплата через payments (purpose=promotion) |
 
-Деньги храним в копейках (`bigint`).
+Новые поля: `artworks.palette, rooms, allow_offers`, статусы `scheduled / auction / commission`;
+`users.vacation_until, accepts_commissions, commission_note, locale`; `orders.kind, price_lock_id, ship_days`;
+`messages.image_url`. Деньги храним в копейках (`bigint`).
 
 ## API (v1, префикс `/api/v1`)
 
@@ -101,21 +116,37 @@ backend/
 | GET | /notifications, POST /notifications/read | уведомления |
 | POST | /reports | жалоба |
 | GET/POST | /admin/reports, /admin/reports/{id}/resolve | модерация |
+| GET | /artworks/{id}/similar, /me/history (DELETE — очистить) | похожие и история |
+| GET/POST/DELETE | /me/saved-searches | сохранённые поиски |
+| GET | /collections, /collections/{slug}; /admin/collections | подборки |
+| POST/GET | /artworks/{id}/offers, /offers, /offers/{id}/{accept\|counter\|decline\|withdraw} | торг |
+| POST/GET | /artworks/{id}/auction, /auctions/{id}, /auctions/{id}/bids, /auctions/{id}/cancel | аукционы |
+| POST/GET | /commissions, /commissions/{id}/{quote\|decline\|cancel\|accept} | работы на заказ |
+| GET/POST | /certificates/{code}, /certificates/{code}/qr.png, /certificates/{code}/transfer, /me/certificates | сертификаты |
+| GET/POST | /feed/posts, /posts, /posts/{id}/like; /users/{id}/posts | посты |
+| GET/POST/PATCH | /exhibitions, /exhibitions/{id}, /cancel, /remind | выставки |
+| GET/POST/PATCH/DELETE | /users/{id}/series, /me/series | серии |
+| GET/POST | /artworks/{id}/questions, /questions/{id}/answer | вопросы о работе |
+| POST/GET | /artworks/{id}/promote, /me/promotions | продвижение |
+| GET | /me/stats/detailed?days= | расширенная статистика (премиум) |
+| POST | /assistant/artwork | помощник описания |
+
+Сайт (без префикса): `/`, `/a/{id}`, `/u/{id}`, `/e/{id}`, `/c/{code}`, `/collections/{slug}`, `/legal/{doc}`,
+`/sitemap.xml`, `/robots.txt`, `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association`.
 
 ## Мобильное приложение
 
 ```
-mobile/
-  app/                       — expo-router
-    (auth)/  welcome, login, register, forgot
-    (tabs)/  index (лента), search, sell|favorites, messages, profile
-    artwork/[id], artwork/edit, artist/[id], checkout/[artworkId], orders/, orders/[id],
-    chat/[id], notifications, settings, stats, premium
-  src/
-    api/       — fetch-клиент с авто-refresh, типы, хуки TanStack Query
-    auth/      — хранилище токенов (expo-secure-store), контекст сессии
-    ui/        — тема (бордо + золото), компоненты
-    lib/       — форматирование цен, валидация (zod)
+mobile/src/
+  app/         — expo-router: вкладки, работа, примерка, художник, заказ, предложения, аукцион,
+                 работы на заказ, выставки, подборки, сертификаты, серии, посты, продвижение, настройки;
+                 a/ u/ e/ c/ collections/ — короткие ссылки сайта, перенаправляют на экраны
+  api/         — fetch-клиент с авто-refresh и Accept-Language, типы, хуки TanStack Query
+  auth/        — сессия, токены в expo-secure-store
+  features/    — формы и сценарии: работа, примерка, PDF сертификата, статусы сделок, realtime
+  i18n/        — useT(), ключ — русская строка, словарь en.ts; scripts/extract-strings.mjs находит новые строки
+  ui/          — tokens.ts (светлая и тёмная палитры), theme-context (makeStyles), компоненты
+  lib/         — форматирование, валидация, фильтры каталога, настройки устройства
 ```
 
 ## Тестирование

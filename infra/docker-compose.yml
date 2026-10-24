@@ -32,6 +32,13 @@ services:
       ALLOW_STUB_PAYMENTS: ${ALLOW_STUB_PAYMENTS:-false}
       TRUST_PROXY_HEADERS: "true"
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      SITE_URL: ${SITE_URL:-}
+      ANDROID_CERT_FINGERPRINTS: ${ANDROID_CERT_FINGERPRINTS:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      STORE_GOOGLE_PLAY: ${STORE_GOOGLE_PLAY:-https://play.google.com/store/apps/details?id=com.aleksandr.artista}
+      STORE_RUSTORE: ${STORE_RUSTORE:-https://www.rustore.ru/catalog/app/com.aleksandr.artista}
+      STORE_APP_STORE: ${STORE_APP_STORE:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
     volumes:
       - uploads:/data/uploads
     expose:
