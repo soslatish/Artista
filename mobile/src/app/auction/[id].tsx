@@ -26,7 +26,7 @@ export default function AuctionRoute() {
 function AuctionScreen({ id }: { id: string }) {
   const q = useAuction(id);
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <AuctionView a={q.data} />;
 }
 
@@ -62,6 +62,7 @@ function AuctionView({ a }: { a: Auction }) {
         refresh();
       } catch (e) {
         setError(errorText(e));
+        refresh(); // ставку могли перебить — обновляем минимальную ставку и историю
       } finally {
         setBusy(false);
       }
@@ -73,6 +74,8 @@ function AuctionView({ a }: { a: Auction }) {
       try {
         await post(`/auctions/${a.id}/cancel`);
         refresh();
+        qc.invalidateQueries({ queryKey: ['artworks'] });
+        qc.invalidateQueries({ queryKey: ['my-artworks'] });
         router.back();
       } catch (e) {
         setError(errorText(e));
@@ -80,7 +83,7 @@ function AuctionView({ a }: { a: Auction }) {
     }, { destructive: true });
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/artwork/[id]', params: { id: a.artwork_id } })} style={styles.item}>
         {a.artwork.image_url ? <Image source={{ uri: a.artwork.image_url }} style={styles.thumb} contentFit="cover" /> : <View style={styles.thumb} />}
         <T variant="artTitle" style={styles.flex}>

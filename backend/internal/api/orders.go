@@ -229,7 +229,13 @@ func (s *Server) createOrderTx(ctx context.Context, tx pgx.Tx, buyerID, artworkI
 		return "", httpx.Conflict("artwork_unavailable", "Работа уже зарезервирована или продана")
 	}
 	if lock != nil {
-		price, kind = lock.priceKop, lock.source
+		// согласованная цена не может быть выше текущей (художник мог снизить цену); ставка аукциона — может
+		if lock.source == "offer" {
+			price = min(lock.priceKop, price)
+		} else {
+			price = lock.priceKop
+		}
+		kind = lock.source
 	} else if onVacation, until, err := artistOnVacation(ctx, tx, artistID); err != nil {
 		return "", err
 	} else if onVacation {

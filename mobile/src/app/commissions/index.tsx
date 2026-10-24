@@ -6,6 +6,7 @@ import { errorText } from '@/api/client';
 import { flatten, useCommissions } from '@/api/hooks';
 import { useSession } from '@/auth/session';
 import { commissionNeedsAction, commissionStatusLabel, commissionTone } from '@/features/commission-status';
+import { SignInGate } from '@/features/sign-in-gate';
 import { useT } from '@/i18n';
 import { formatDate, formatPrice } from '@/lib/format';
 import { Chip, EmptyState, ErrorState, Loading } from '@/ui/primitives';
@@ -22,6 +23,7 @@ export default function CommissionsScreen() {
   const [chosen, setRole] = useState<'buyer' | 'artist' | null>(null);
   const role = chosen ?? (user?.role === 'artist' && param !== 'buyer' ? 'artist' : 'buyer');
   const q = useCommissions(role, !!user);
+  if (!user) return <SignInGate text={t('Войдите, чтобы заказать работу у художника.')} />;
   return (
     <View style={styles.root}>
       {user?.role === 'artist' ? (
@@ -32,7 +34,7 @@ export default function CommissionsScreen() {
       ) : null}
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <FlatList

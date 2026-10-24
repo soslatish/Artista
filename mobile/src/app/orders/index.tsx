@@ -35,7 +35,7 @@ export default function OrdersScreen() {
       ) : null}
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <FlatList

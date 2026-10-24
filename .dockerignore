@@ -1,0 +1,12 @@
+**/node_modules
+**/.expo
+mobile/dist
+mobile/web-build
+mobile/coverage
+mobile/ios
+mobile/android
+backend/uploads
+backend/api
+backend/cover.out
+.git
+.claude

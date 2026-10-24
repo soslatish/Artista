@@ -4,8 +4,8 @@
   <h1 id="ex-name">{{.Title}}</h1>
   <p class="meta"><a href="/u/{{.Artist.ID}}">{{.Artist.Name}}</a>, {{if eq .Status "open"}}выставка открыта{{else}}откроется {{datetime .StartsAt}} по Москве{{end}}</p>
   {{with .Description}}<p class="bio">{{.}}</p>{{end}}
-  {{if ne .Status "open"}}<p class="notice">Включите напоминание в приложении — пришлём уведомление в момент открытия, когда работы появятся в продаже.</p>{{end}}
-  <div><a class="btn only-touch" href="artista://exhibition/{{.ID}}">Открыть в приложении</a></div>
+  {{if ne .Status "open"}}<p class="notice">Включите напоминание в браузере или в приложении — пришлём уведомление в момент открытия, когда работы появятся в продаже.</p>{{end}}
+  <div class="actions">{{template "web" $}}<a class="btn btn--line only-touch" href="artista://exhibition/{{.ID}}">Открыть в приложении</a></div>
 </section>
 {{end}}
 <section class="section" aria-label="Работы выставки">

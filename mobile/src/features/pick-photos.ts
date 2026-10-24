@@ -17,9 +17,14 @@ export async function pickPhotos(source: PhotoSource, limit = 1): Promise<ImageP
     }
   }
   const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.85, exif: false };
-  const res =
-    source === 'camera'
-      ? await ImagePicker.launchCameraAsync(opts)
-      : await ImagePicker.launchImageLibraryAsync({ ...opts, allowsMultipleSelection: limit > 1, selectionLimit: limit });
-  return res.canceled ? [] : res.assets.slice(0, limit);
+  try {
+    const res =
+      source === 'camera'
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync({ ...opts, allowsMultipleSelection: limit > 1, selectionLimit: limit });
+    return res.canceled ? [] : res.assets.slice(0, limit);
+  } catch {
+    notify(t('Не удалось открыть фото'), t('Попробуйте ещё раз или выберите другой снимок.'));
+    return [];
+  }
 }

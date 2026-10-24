@@ -218,6 +218,10 @@ func (s *Server) transferCertificate(w http.ResponseWriter, r *http.Request, u h
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
+	// поиск получателя по e-mail — ограничиваем, чтобы нельзя было перебирать адреса
+	if !s.socialLimiter.Allow("cert-transfer:" + u.ID) {
+		return httpx.TooMany()
+	}
 	code := strings.ToUpper(strings.TrimSpace(r.PathValue("code")))
 	var newCode, recipientID, title string
 	err := s.withTx(r.Context(), func(tx pgx.Tx) error {

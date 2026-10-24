@@ -16,7 +16,7 @@ export function escapeHtml(s: string): string {
 /** Разрешаем в PDF только картинки по https и QR из data:image/png. */
 function safeImage(url: string | undefined): string {
   if (!url) return '';
-  if (url.startsWith('https://') || url.startsWith('http://') || url.startsWith('data:image/png;base64,')) return escapeHtml(url);
+  if (url.startsWith('https://') || url.startsWith('data:image/png;base64,')) return escapeHtml(url);
   return '';
 }
 

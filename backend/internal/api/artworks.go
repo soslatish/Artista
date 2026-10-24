@@ -549,8 +549,12 @@ func (s *Server) archiveArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 			return err
 		}
 		// принятые предложения по снятой работе больше не действуют
-		_, err = tx.Exec(r.Context(), `UPDATE offers SET status = 'expired', updated_at = now()
-			WHERE artwork_id = $1 AND status IN ('pending','countered','accepted')`, id)
+		if _, err := tx.Exec(r.Context(), `UPDATE offers SET status = 'expired', updated_at = now()
+			WHERE artwork_id = $1 AND status IN ('pending','countered','accepted')`, id); err != nil {
+			return err
+		}
+		_, err = tx.Exec(r.Context(), `UPDATE price_locks SET released_at = now()
+			WHERE artwork_id = $1 AND used_at IS NULL AND released_at IS NULL`, id)
 		return err
 	})
 	if err != nil {

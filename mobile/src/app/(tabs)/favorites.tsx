@@ -34,7 +34,7 @@ export default function FavoritesScreen() {
       <T variant="display" style={styles.title}>
         {t('Избранное')}
       </T>
-      {q.isError ? (
+      {q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <Gallery

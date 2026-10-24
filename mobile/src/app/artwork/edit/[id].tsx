@@ -36,6 +36,6 @@ export default function EditArtworkScreen() {
   const q = useArtwork(id ?? '');
   if (!id) return <ErrorState text={t('Ссылка повреждена.')} />;
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <ArtworkFormScreen artworkId={id} initial={toForm(q.data)} isPublished={q.data.status === 'published' || q.data.status === 'scheduled'} />;
 }

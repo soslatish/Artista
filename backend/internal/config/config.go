@@ -27,6 +27,7 @@ type Config struct {
 	StoreGooglePlay, StoreRuStore, StoreAppStore string
 	SupportEmail                                 string // адрес поддержки на сайте (необязательно)
 	UploadDir                                    string
+	WebAppDir                                    string
 	MaxUploadBytes                               int64
 	PaymentsProvider                             string // stub
 	PushProvider                                 string // log
@@ -59,6 +60,7 @@ func Load() (Config, error) {
 		StoreAppStore:           os.Getenv("STORE_APP_STORE"),
 		SupportEmail:            os.Getenv("SUPPORT_EMAIL"),
 		UploadDir:               env("UPLOAD_DIR", "./uploads"),
+		WebAppDir:               env("WEB_APP_DIR", "./webapp"),
 		MaxUploadBytes:          int64Env("MAX_UPLOAD_BYTES", 10<<20),
 		PaymentsProvider:        env("PAYMENTS_PROVIDER", "stub"),
 		PushProvider:            env("PUSH_PROVIDER", "log"),

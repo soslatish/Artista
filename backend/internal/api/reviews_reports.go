@@ -204,7 +204,10 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 			var q string
 			switch targetType {
 			case "artwork":
-				q = `UPDATE artworks SET status = 'hidden', updated_at = now() WHERE id = $1 AND status IN ('draft','published','archived')`
+				if err := cancelArtworkDeals(r.Context(), tx, `a.id = $1`, targetID); err != nil {
+					return err
+				}
+				q = `UPDATE artworks SET status = 'hidden', updated_at = now() WHERE id = $1 AND status IN ('draft','published','archived','auction','scheduled')`
 			case "message":
 				q = `UPDATE messages SET body = 'Сообщение удалено модератором', image_url = '' WHERE id = $1`
 			case "question":
@@ -217,8 +220,13 @@ func (s *Server) resolveReport(w http.ResponseWriter, r *http.Request, _ httpx.U
 				for _, extra := range []string{
 					`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
 					`DELETE FROM device_tokens WHERE user_id = $1`,
-					`UPDATE artworks SET status = 'hidden', updated_at = now() WHERE artist_id = $1 AND status IN ('draft','published','archived')`,
+					`UPDATE artworks SET status = 'hidden', updated_at = now() WHERE artist_id = $1 AND status IN ('draft','published','archived','auction','scheduled')`,
 				} {
+					if strings.Contains(extra, "UPDATE artworks") {
+						if err := cancelArtworkDeals(r.Context(), tx, `a.artist_id = $1`, targetID); err != nil {
+							return err
+						}
+					}
 					if _, err := tx.Exec(r.Context(), extra, targetID); err != nil {
 						return err
 					}

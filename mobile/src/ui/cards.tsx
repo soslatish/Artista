@@ -6,12 +6,12 @@ import { router } from 'expo-router';
 import { memo, useState } from 'react';
 import { FlatList, Pressable, useWindowDimensions, View } from 'react-native';
 
-import { del, post as apiPost } from '@/api/client';
+import { del, errorText, post as apiPost } from '@/api/client';
 import { keys } from '@/api/hooks';
 import type { Exhibition, Post } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
-import { confirmAction } from '@/lib/confirm';
+import { confirmAction, notify } from '@/lib/confirm';
 import { formatDate, formatDateTime, formatPrice, formatTimeLeft } from '@/lib/format';
 import { requireAuth } from '@/lib/guard';
 
@@ -28,6 +28,13 @@ export const PostCard = memo(function PostCard({ post }: { post: Post }) {
   const { width } = useWindowDimensions();
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likes);
+  // лента перечиталась (например, лайк с другого устройства) — берём свежие значения
+  const [synced, setSynced] = useState({ liked: post.liked, likes: post.likes });
+  if (synced.liked !== post.liked || synced.likes !== post.likes) {
+    setSynced({ liked: post.liked, likes: post.likes });
+    setLiked(post.liked);
+    setLikes(post.likes);
+  }
   const mine = user?.id === post.artist.id;
   const imageWidth = width - space.lg * 2;
 
@@ -44,10 +51,12 @@ export const PostCard = memo(function PostCard({ post }: { post: Post }) {
 
   const remove = () =>
     confirmAction(t('Удалить пост?'), t('Пост исчезнет из ленты подписчиков.'), () => {
-      void del(`/posts/${post.id}`).then(() => {
-        qc.invalidateQueries({ queryKey: keys.postsFeed });
-        qc.invalidateQueries({ queryKey: keys.userPosts(post.artist.id) });
-      });
+      del(`/posts/${post.id}`)
+        .then(() => {
+          qc.invalidateQueries({ queryKey: keys.postsFeed });
+          qc.invalidateQueries({ queryKey: keys.userPosts(post.artist.id) });
+        })
+        .catch((e: unknown) => notify(t('Не удалось удалить'), errorText(e)));
     }, { destructive: true, confirmText: t('Удалить') });
 
   return (

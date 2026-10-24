@@ -9,6 +9,7 @@ import { errorText, fieldErrors, post } from '@/api/client';
 import { useArtwork, useDeliveryQuotes } from '@/api/hooks';
 import type { DeliveryMethod, Order, Payment } from '@/api/types';
 import { useSession } from '@/auth/session';
+import { openPaymentPage } from '@/features/open-payment';
 import { TestPaymentSheet } from '@/features/test-payment';
 import { useT } from '@/i18n';
 import { formatPrice, plural } from '@/lib/format';
@@ -96,7 +97,7 @@ function Checkout({ artworkId }: { artworkId: string }) {
       setOrder(o);
       const p = await post<Payment>(`/orders/${o.id}/pay`);
       if (p.test_mode) setPayment(p);
-      // боевой провайдер: здесь откроется p.confirmation_url
+      else await openPaymentPage(p);
     } catch (e) {
       setErrors(fieldErrors(e));
       setError(errorText(e));
@@ -107,8 +108,7 @@ function Checkout({ artworkId }: { artworkId: string }) {
 
   const paid = () => {
     setPayment(null);
-    qc.invalidateQueries({ queryKey: ['orders'] });
-    qc.invalidateQueries({ queryKey: ['artworks'] });
+    for (const key of ['orders', 'artworks', 'artwork', 'offer', 'offers', 'auction', 'commissions']) qc.invalidateQueries({ queryKey: [key] });
     if (order) router.replace({ pathname: '/orders/[id]', params: { id: order.id } });
   };
 

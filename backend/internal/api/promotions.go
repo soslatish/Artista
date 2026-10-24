@@ -34,6 +34,9 @@ func (s *Server) promoteArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
+	if !s.socialLimiter.Allow("promote:" + u.ID) {
+		return httpx.TooMany()
+	}
 	price, ok := domain.PromotionPrice(in.Days)
 	if !ok {
 		return httpx.Validation(map[string]string{"days": "Выберите срок продвижения из списка"})
@@ -65,6 +68,10 @@ func (s *Server) promoteArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 
 // activatePromotion включает оплаченное продвижение; если работа уже продвигается — продлевает.
 func activatePromotion(ctx context.Context, tx pgx.Tx, promotionID string) error {
+	// блокируем работу: две оплаты подряд должны сложить сроки, а не начаться одновременно
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM artworks WHERE id = (SELECT artwork_id FROM promotions WHERE id = $1) FOR UPDATE`, promotionID); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `UPDATE promotions p SET status = 'active',
 			starts_at = greatest(now(), coalesce((SELECT max(ends_at) FROM promotions x
 				WHERE x.artwork_id = p.artwork_id AND x.status = 'active' AND x.id <> p.id), now())),

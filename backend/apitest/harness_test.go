@@ -69,6 +69,12 @@ func run(m *testing.M) int {
 
 	uploadDir, _ := os.MkdirTemp("", "artista-uploads")
 	defer os.RemoveAll(uploadDir)
+	// минимальная «сборка» веб-версии для /app/
+	webDir, _ := os.MkdirTemp("", "artista-webapp")
+	defer os.RemoveAll(webDir)
+	_ = os.MkdirAll(webDir+"/_expo/static/js", 0o755)
+	_ = os.WriteFile(webDir+"/index.html", []byte("<!doctype html><div id=root>artista-webapp</div>"), 0o644)
+	_ = os.WriteFile(webDir+"/_expo/static/js/app-123.js", []byte("console.log(1)"), 0o644)
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// базовый URL нужен до старта сервера — используем неинициализированный httptest
@@ -77,7 +83,7 @@ func run(m *testing.M) int {
 	cfg := config.Config{
 		Env: "test", DatabaseURL: dsn, JWTSecret: []byte(strings.Repeat("t", 32)),
 		AccessTTL: 15 * time.Minute, RefreshTTL: 24 * time.Hour, PublicBaseURL: base,
-		UploadDir: uploadDir, MaxUploadBytes: 1 << 20, PaymentsProvider: "stub",
+		UploadDir: uploadDir, WebAppDir: webDir, MaxUploadBytes: 1 << 20, PaymentsProvider: "stub",
 		CORSOrigins: []string{"*"}, WorkerInterval: time.Hour,
 		AuthRatePerMin: 100_000, APIRatePerMin: 100_000,
 	}

@@ -7,6 +7,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { errorText, post } from '@/api/client';
 import { keys, useArtwork, useCatalogMeta } from '@/api/hooks';
 import type { Payment } from '@/api/types';
+import { openPaymentPage } from '@/features/open-payment';
 import { TestPaymentSheet } from '@/features/test-payment';
 import { useT } from '@/i18n';
 import { notify } from '@/lib/confirm';
@@ -46,6 +47,7 @@ function Promote({ artworkId }: { artworkId: string }) {
     try {
       const p = await post<Payment>(`/artworks/${a.id}/promote`, { days: selected.days });
       if (p.test_mode) setPayment(p);
+      else await openPaymentPage(p);
     } catch (e) {
       setError(errorText(e));
     } finally {

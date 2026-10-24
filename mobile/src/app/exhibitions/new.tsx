@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
 import { flatten, useMyArtworks } from '@/api/hooks';
@@ -70,8 +70,8 @@ export default function NewExhibitionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <T variant="body">{t('Выставка — это премьера серии. Подписчики получат анонс сразу, а напоминание — к открытию. До назначенного времени работы видны, но купить их нельзя.')}</T>
         <Field label={t('Название')} value={title} onChangeText={setTitle} maxLength={100} error={errors.title} />
         <Field label={t('О выставке')} value={description} onChangeText={setDescription} multiline maxLength={2000} placeholder={t('Что объединяет работы, как появилась серия')} />
@@ -126,10 +126,11 @@ export default function NewExhibitionScreen() {
             );
           })}
         </View>
+        {drafts.hasNextPage ? <Button title={t('Показать ещё')} variant="ghost" loading={drafts.isFetchingNextPage} onPress={() => void drafts.fetchNextPage()} /> : null}
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={t('Анонсировать выставку')} loading={busy} disabled={!picked.length} onPress={submit} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

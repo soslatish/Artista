@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
 import { useCatalogMeta, useUser } from '@/api/hooks';
@@ -106,8 +106,8 @@ function NewCommission({ artistId }: { artistId: string }) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <T variant="title">{t('Работа на заказ у {name}', { name: a.name })}</T>
         {a.commission_note ? <Notice text={a.commission_note} /> : null}
         {!a.accepts_commissions ? <Notice tone="danger" text={t('Сейчас художник не принимает заказы.')} /> : null}
@@ -165,7 +165,7 @@ function NewCommission({ artistId }: { artistId: string }) {
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={t('Отправить запрос')} loading={busy} disabled={uploading || !a.accepts_commissions} onPress={submit} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

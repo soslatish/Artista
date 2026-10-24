@@ -209,6 +209,9 @@ func (s *Server) createExhibition(w http.ResponseWriter, r *http.Request, u http
 	if u.Role != "artist" {
 		return httpx.Forbidden("Выставки создают художники")
 	}
+	if !s.socialLimiter.Allow("exhibition:" + u.ID) {
+		return httpx.TooMany()
+	}
 	var in exhibitionInput
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err

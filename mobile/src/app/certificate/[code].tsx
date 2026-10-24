@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
 import { keys, useCatalogMeta, useCertificate } from '@/api/hooks';
@@ -31,7 +31,7 @@ function CertificateScreen({ code }: { code: string }) {
   const q = useCertificate(code);
   const meta = useCatalogMeta();
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   // сервер отдаёт код техники — показываем (и печатаем в PDF) её название
   const technique = t(labelOf(meta.data, 'techniques', q.data.artwork.technique)) || q.data.artwork.technique;
   return <CertificateView c={{ ...q.data, artwork: { ...q.data.artwork, technique } }} />;
@@ -58,8 +58,8 @@ function CertificateView({ c }: { c: Certificate }) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <View style={styles.sheet}>
           <T variant="smallStrong" color={colors.bordeaux}>
             {t('Сертификат подлинности')}
@@ -101,7 +101,7 @@ function CertificateView({ c }: { c: Certificate }) {
 
         {c.is_mine && active ? <Transfer c={c} /> : null}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

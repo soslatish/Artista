@@ -196,6 +196,9 @@ p { margin: 0; }
   border-radius: 10px; font-weight: 600; text-decoration: none; background: var(--bordeaux); color: var(--bordeaux-ink);
 }
 .btn--line { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.store--web { order: -1; }
+.museum-label .store--web, .section .store--web { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
 .only-touch { display: none; }
 @media (hover: none) { .only-touch { display: inline-flex; } }
 

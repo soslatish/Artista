@@ -6,6 +6,7 @@ import { errorText } from '@/api/client';
 import { flatten, useOffers } from '@/api/hooks';
 import { useSession } from '@/auth/session';
 import { offerNeedsAction, offerStatusLabel, offerTone } from '@/features/offer-status';
+import { SignInGate } from '@/features/sign-in-gate';
 import { useT } from '@/i18n';
 import { formatDate, formatPrice } from '@/lib/format';
 import { Chip, EmptyState, ErrorState, Loading } from '@/ui/primitives';
@@ -22,6 +23,7 @@ export default function OffersScreen() {
   const [chosen, setRole] = useState<'buyer' | 'artist' | null>(null);
   const role = chosen ?? (user?.role === 'artist' && param !== 'buyer' ? 'artist' : 'buyer');
   const q = useOffers(role, !!user);
+  if (!user) return <SignInGate text={t('Войдите, чтобы предлагать цену и отвечать на предложения.')} />;
   return (
     <View style={styles.root}>
       {user?.role === 'artist' ? (
@@ -32,7 +34,7 @@ export default function OffersScreen() {
       ) : null}
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <FlatList

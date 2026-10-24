@@ -84,9 +84,11 @@ type siteArtwork struct {
 // sitePage — данные страницы (общие поля + поля конкретной страницы).
 type sitePage struct {
 	Title, Description, OGTitle, OGType, Canonical, Image, AppPath, Version, SupportEmail string
-	Year                                                                                  int
-	NoIndex                                                                               bool
-	Stores                                                                                siteStores
+	// WebApp — адрес веб-версии приложения (пусто, если сборка не установлена); WebPath — экран в ней
+	WebApp, WebPath string
+	Year            int
+	NoIndex         bool
+	Stores          siteStores
 
 	Wall, Recent, Similar, Works []siteArtwork
 	Artwork                      *siteArtwork
@@ -161,6 +163,7 @@ func (s *Server) basePage(r *http.Request, title, description string) sitePage {
 		Canonical: s.siteURL() + r.URL.Path, Image: s.siteURL() + "/static/og.jpg",
 		Version: siteVersion, Year: time.Now().In(moscow).Year(), SupportEmail: s.Config.SupportEmail,
 		Stores: siteStores{GooglePlay: s.Config.StoreGooglePlay, RuStore: s.Config.StoreRuStore, AppStore: s.Config.StoreAppStore},
+		WebApp: s.webAppURL(),
 	}
 }
 
@@ -246,6 +249,7 @@ func (s *Server) siteArtwork(w http.ResponseWriter, r *http.Request) {
 	p.OGTitle = "«" + a.Title + "» — " + a.Artist.Name
 	p.OGType = "product"
 	p.AppPath = "artwork/" + a.ID
+	p.WebPath = "/artwork/" + a.ID
 	if sa.Image != "" {
 		p.Image = sa.Image
 	}
@@ -286,6 +290,7 @@ func (s *Server) siteArtist(w http.ResponseWriter, r *http.Request) {
 	p := s.basePage(r, d.Name+" — художник | Artista", truncate(strings.ReplaceAll(desc, "\n", " "), 180))
 	p.OGType = "profile"
 	p.AppPath = "artist/" + d.ID
+	p.WebPath = "/artist/" + d.ID
 	if d.AvatarURL != "" {
 		p.Image = d.AvatarURL
 	}
@@ -319,6 +324,7 @@ func (s *Server) siteExhibition(w http.ResponseWriter, r *http.Request) {
 	}
 	p := s.basePage(r, e.Title+" — выставка | Artista", when+". "+e.Artist.Name+" на Artista.")
 	p.AppPath = "exhibition/" + e.ID
+	p.WebPath = "/exhibition/" + e.ID
 	if e.CoverURL != "" {
 		p.Image = e.CoverURL
 	}
@@ -349,6 +355,7 @@ func (s *Server) siteCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	p := s.basePage(r, c.Title+" | Artista", desc)
 	p.Collection = &c
+	p.WebPath = "/collection/" + c.Slug
 	meta := domain.CatalogMeta()
 	for _, a := range items {
 		p.Works = append(p.Works, toSiteArtwork(a, meta))
@@ -367,6 +374,7 @@ func (s *Server) siteCertificate(w http.ResponseWriter, r *http.Request) {
 	}
 	p := s.basePage(r, "Сертификат "+c.Code+" | Artista", "Сертификат подлинности работы «"+c.Artwork.Title+"», "+c.Artist.Name+".")
 	p.NoIndex = true
+	p.WebPath = "/certificate/" + c.Code
 	if c.Artwork.ImageURL != "" {
 		p.Image = c.Artwork.ImageURL
 	}
@@ -498,6 +506,10 @@ func (s *Server) siteRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /collections/{slug}", s.siteCollection)
 	mux.HandleFunc("GET /legal/{doc}", s.siteLegal)
 	mux.Handle("GET /static/", s.siteStaticHandler())
+	mux.HandleFunc("GET /app", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/app/", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("GET /app/", s.webApp)
 	mux.HandleFunc("GET /robots.txt", s.robots)
 	mux.HandleFunc("GET /sitemap.xml", s.sitemap)
 	mux.HandleFunc("GET /.well-known/assetlinks.json", s.assetLinks)

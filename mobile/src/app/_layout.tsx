@@ -6,13 +6,15 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ApiError, patch } from '@/api/client';
 import { SessionProvider, useSession } from '@/auth/session';
 import { installQueryLifecycle } from '@/features/query-lifecycle';
 import { RealtimeBridge } from '@/features/realtime';
+import { WebHeaderLeft } from '@/features/web-header-left';
 import { deviceLocale, I18nProvider, type Locale, useLocale, useT } from '@/i18n';
 import { loadPref } from '@/lib/prefs';
 import { fonts, ThemeProvider, type ThemePref, useTheme } from '@/ui/theme';
@@ -32,15 +34,34 @@ function makeClient() {
 }
 
 /** Язык уведомлений на сервере совпадает с языком приложения. */
+/**
+ * Язык между устройствами: при входе берём язык из профиля (его могли выбрать на другом устройстве),
+ * а смену языка в настройках сохраняем в профиль — от него зависят тексты уведомлений.
+ */
 function LocaleSync() {
   const { user, setUser } = useSession();
-  const { locale } = useLocale();
+  const { locale, setLocale } = useLocale();
+  const syncedFor = useRef<string | null>(null);
+  const patched = useRef<string | null>(null);
   useEffect(() => {
-    if (!user || user.locale === locale) return;
+    if (!user) {
+      syncedFor.current = null;
+      return;
+    }
+    if (syncedFor.current !== user.id) {
+      syncedFor.current = user.id;
+      patched.current = null;
+      if ((user.locale === 'ru' || user.locale === 'en') && user.locale !== locale) {
+        setLocale(user.locale);
+        return;
+      }
+    }
+    if (user.locale === locale || patched.current === locale) return;
+    patched.current = locale;
     patch<typeof user>('/me', { locale })
       .then(setUser)
       .catch(() => undefined);
-  }, [user, locale, setUser]);
+  }, [user, locale, setLocale, setUser]);
   return null;
 }
 
@@ -59,6 +80,7 @@ function RootStack() {
     headerShadowVisible: false,
     contentStyle: { backgroundColor: colors.wall },
     headerBackButtonDisplayMode: 'minimal' as const,
+    ...(Platform.OS === 'web' ? { headerLeft: (props: { canGoBack?: boolean }) => <WebHeaderLeft canGoBack={props.canGoBack} /> } : {}),
   };
   const title = (s: string) => ({ title: t(s) });
   return (

@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { FlatList, View } from 'react-native';
 
 import { del, errorText, fieldErrors, patch, post } from '@/api/client';
 import { keys, useUserSeries } from '@/api/hooks';
@@ -27,7 +27,11 @@ function SeriesManager({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const q = useUserSeries(userId);
   const [editing, setEditing] = useState<Series | 'new' | null>(null);
-  const refresh = () => qc.invalidateQueries({ queryKey: keys.series(userId) });
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: keys.series(userId) });
+    qc.invalidateQueries({ queryKey: keys.userArtworks(userId) });
+    qc.invalidateQueries({ queryKey: ['artwork'] });
+  };
 
   const remove = (s: Series) =>
     confirmAction(t('Удалить серию «{title}»?', { title: s.title }), t('Работы останутся в профиле, просто без серии.'), async () => {
@@ -40,14 +44,15 @@ function SeriesManager({ userId }: { userId: string }) {
     }, { destructive: true });
 
   if (q.isLoading) return <Loading />;
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.root}>
       <FlatList
         data={q.data ?? []}
         keyExtractor={(s) => s.id}
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         ListHeaderComponent={
           <View style={styles.head}>
             <T variant="small">{t('Серии группируют работы в профиле: «Северные пейзажи», «Ночной город». Работу добавляют в серию в её карточке.')}</T>
@@ -71,7 +76,7 @@ function SeriesManager({ userId }: { userId: string }) {
         }
         ListEmptyComponent={editing === 'new' ? undefined : <EmptyState icon="albums-outline" title={t('Серий пока нет')} text={t('Создайте первую — и покупатели увидят ваши работы сгруппированными по темам.')} />}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

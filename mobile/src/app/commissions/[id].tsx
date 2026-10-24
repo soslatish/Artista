@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
 import { keys, useCatalogMeta, useCommission } from '@/api/hooks';
@@ -29,7 +29,7 @@ export default function CommissionRoute() {
 function CommissionScreen({ id }: { id: string }) {
   const q = useCommission(id);
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <CommissionView c={q.data} />;
 }
 
@@ -51,16 +51,19 @@ function CommissionView({ c }: { c: Commission }) {
       const next = await post<Commission>(`/commissions/${c.id}/${action}`, body);
       qc.setQueryData(keys.commission(c.id), next);
       qc.invalidateQueries({ queryKey: ['commissions'] });
+      if (next.order_id) qc.invalidateQueries({ queryKey: ['orders'] });
       return next;
     } catch (e) {
       setError(errorText(e));
+      // цена или статус изменились на сервере — показываем актуальное предложение
+      qc.invalidateQueries({ queryKey: keys.commission(c.id) });
       throw e;
     }
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <View style={styles.party}>
           <Avatar uri={other.avatar_url} name={other.name} size={48} />
           <View style={styles.flex}>
@@ -116,7 +119,7 @@ function CommissionView({ c }: { c: Commission }) {
         ) : null}
       </ScrollView>
       {viewer !== null ? <ImageViewer images={c.images} index={viewer} visible title="" onClose={() => setViewer(null)} /> : null}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -184,7 +187,7 @@ function AcceptForm({ c, act }: { c: Commission; act: Act }) {
     if (Object.keys(errs).length) return;
     setBusy(true);
     try {
-      const next = await act('accept', { delivery_method: method, address: addr });
+      const next = await act('accept', { delivery_method: method, address: addr, expected_price_kop: c.quote_kop });
       if (next?.order_id) router.replace({ pathname: '/orders/[id]', params: { id: next.order_id } });
     } catch (e) {
       setErrors(fieldErrors(e));

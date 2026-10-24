@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { del, errorText, post } from '@/api/client';
@@ -31,7 +31,7 @@ function ExhibitionScreen({ id }: { id: string }) {
   const colors = useColors();
   const q = useExhibition(id);
   const e = pageMeta<Exhibition>(q.data, 'exhibition');
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <View style={styles.root}>
       <Stack.Screen
@@ -66,6 +66,13 @@ function Header({ e }: { e: Exhibition }) {
   const [error, setError] = useState('');
   const mine = user?.id === e.artist.id;
   const upcoming = e.status === 'upcoming';
+  // отсчёт дошёл до нуля — перечитываем выставку, чтобы работы открылись без ручного обновления
+  const due = upcoming && new Date(e.starts_at) <= now;
+  useEffect(() => {
+    if (!due) return;
+    const timer = setTimeout(() => void qc.invalidateQueries({ queryKey: keys.exhibition(e.id) }), 3000);
+    return () => clearTimeout(timer);
+  }, [due, e.id, qc]);
 
   const patchMeta = (next: Partial<Exhibition>) =>
     qc.setQueryData(keys.exhibition(e.id), (old: { pages: { meta: Record<string, unknown> }[] } | undefined) =>

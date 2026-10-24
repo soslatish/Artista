@@ -2,6 +2,7 @@
 backend/uploads/
 backend/cover.out
 backend/api
+backend/webapp/
 # mobile
 mobile/node_modules/
 mobile/.expo/

@@ -33,7 +33,7 @@
     </div>
     {{end}}
     <p style="color:var(--graphite); font-size:.9rem">Сертификат выпущен Artista после завершения сделки: покупатель получил работу, художник — оплату. Подлинность можно проверить по этой странице или QR-коду.</p>
-    <div class="no-print"><button class="btn btn--line" type="button" onclick="window.print()">Распечатать</button></div>
+    <div class="no-print actions">{{template "web" $}}<button class="btn btn--line" type="button" onclick="window.print()">Распечатать</button></div>
   </article>
 </div>
 {{end}}

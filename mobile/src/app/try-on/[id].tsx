@@ -84,7 +84,7 @@ function TryOn({ id }: { id: string }) {
   }, [photo, room, stage]);
 
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   const a = q.data;
 
   const pxPerCm = photo ? photoPxPerCm : bg ? room.pxPerCm * bg.scale : null;

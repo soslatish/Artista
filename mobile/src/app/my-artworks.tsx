@@ -39,7 +39,7 @@ export default function MyArtworksScreen() {
 
   return (
     <View style={styles.root}>
-      {q.isError ? (
+      {q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <Gallery

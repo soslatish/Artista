@@ -4,6 +4,7 @@ import { FlatList, RefreshControl } from 'react-native';
 import { errorText } from '@/api/client';
 import { useCertificates } from '@/api/hooks';
 import { useSession } from '@/auth/session';
+import { SignInGate } from '@/features/sign-in-gate';
 import { useT } from '@/i18n';
 import { formatDate } from '@/lib/format';
 import { EmptyState, ErrorState, Loading } from '@/ui/primitives';
@@ -16,8 +17,9 @@ export default function CertificatesScreen() {
   const colors = useColors();
   const { user } = useSession();
   const q = useCertificates(!!user);
+  if (!user) return <SignInGate text={t('Сертификаты подлинности купленных работ хранятся в аккаунте.')} />;
   if (q.isLoading) return <Loading />;
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <FlatList
       style={styles.root}

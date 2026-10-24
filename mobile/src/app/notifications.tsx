@@ -80,7 +80,7 @@ export default function NotificationsScreen() {
   }, [unread, qc]);
 
   if (q.isLoading) return <Loading />;
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <FlatList
       style={styles.root}

@@ -26,7 +26,7 @@ function CollectionScreen({ slug }: { slug: string }) {
   const colors = useColors();
   const q = useCollection(slug);
   const c = pageMeta<Collection>(q.data, 'collection');
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <View style={styles.root}>
       <Stack.Screen

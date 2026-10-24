@@ -122,6 +122,10 @@ func (s *Server) createOffer(w http.ResponseWriter, r *http.Request, u httpx.Use
 		case errors.Is(err, domain.ErrOfferTooLow):
 			return httpx.Validation(map[string]string{"amount_kop": "Минимальное предложение — " + rub(domain.OfferMinimum(price))})
 		}
+		if _, err := tx.Exec(r.Context(), `UPDATE offers SET status = 'expired', updated_at = now()
+			WHERE artwork_id = $1 AND buyer_id = $2 AND status IN ('pending','countered','accepted') AND expires_at <= now()`, artworkID, u.ID); err != nil {
+			return err
+		}
 		var recent int
 		if err := tx.QueryRow(r.Context(), `SELECT count(*) FROM offers WHERE buyer_id = $1 AND created_at > now() - interval '1 day'`, u.ID).Scan(&recent); err != nil {
 			return err
@@ -220,7 +224,7 @@ func (s *Server) offerAction(w http.ResponseWriter, r *http.Request, u httpx.Use
 		var expires time.Time
 		err := tx.QueryRow(r.Context(), `SELECT o.buyer_id, o.artist_id, o.artwork_id, o.status, o.amount_kop, o.counter_kop, o.expires_at,
 				a.price_kop, a.status, a.title
-			FROM offers o JOIN artworks a ON a.id = o.artwork_id WHERE o.id = $1 FOR UPDATE OF o`, id).
+			FROM offers o JOIN artworks a ON a.id = o.artwork_id WHERE o.id = $1 FOR UPDATE OF o, a`, id).
 			Scan(&buyerID, &artistID, &artworkID, &status, &amount, &counter, &expires, &price, &artStatus, &title)
 		if isNoRows(err) || (err == nil && u.ID != buyerID && u.ID != artistID) {
 			return httpx.NotFound("Предложение не найдено")
@@ -332,36 +336,22 @@ func (s *Server) ExpireOffers(ctx context.Context) (int, error) {
 // ReleaseExpiredLocks снимает истёкшие брони цены. Работа победителя аукциона, который не оформил
 // заказ, возвращается в продажу.
 func (s *Server) ReleaseExpiredLocks(ctx context.Context) (int, error) {
-	rows, err := s.DB.Query(ctx, `UPDATE price_locks SET released_at = now()
-		WHERE used_at IS NULL AND released_at IS NULL AND expires_at <= now()
-		RETURNING artwork_id, source`)
+	// снятие брони и возврат работы в продажу — одна команда: работа не зависнет в «reserved»,
+	// если второй шаг не выполнится
+	var n int
+	err := s.DB.QueryRow(ctx, `WITH released AS (
+			UPDATE price_locks SET released_at = now()
+			WHERE used_at IS NULL AND released_at IS NULL AND expires_at <= now()
+			RETURNING artwork_id, source
+		), relisted AS (
+			UPDATE artworks a SET status = 'published', updated_at = now()
+			WHERE a.id IN (SELECT artwork_id FROM released WHERE source = 'auction') AND a.status = 'reserved'
+			AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.artwork_id = a.id AND o.status IN ('awaiting_payment','paid','confirmed','shipped'))
+			RETURNING a.id
+		)
+		SELECT count(*) FROM released`).Scan(&n)
 	if err != nil {
-		return 0, err
-	}
-	var auctionArtworks []string
-	n := 0
-	for rows.Next() {
-		var artworkID, source string
-		if err := rows.Scan(&artworkID, &source); err != nil {
-			rows.Close()
-			return n, err
-		}
-		n++
-		if source == "auction" {
-			auctionArtworks = append(auctionArtworks, artworkID)
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return n, err
-	}
-	if len(auctionArtworks) > 0 {
-		_, err := s.DB.Exec(ctx, `UPDATE artworks a SET status = 'published', updated_at = now()
-			WHERE a.id = ANY($1::uuid[]) AND a.status = 'reserved'
-			AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.artwork_id = a.id AND o.status IN ('awaiting_payment','paid','confirmed','shipped'))`, auctionArtworks)
-		if err != nil {
-			return n, err
-		}
+		return 0, fmt.Errorf("release locks: %w", err)
 	}
 	return n, nil
 }

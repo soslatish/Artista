@@ -51,10 +51,13 @@
 </html>{{end}}
 
 {{define "stores"}}<div class="stores">
+  {{if and .WebApp (not .WebPath)}}<a class="store store--web" href="{{.WebApp}}/">Открыть в браузере</a>{{end}}
   {{if .Stores.RuStore}}<a class="store" href="{{.Stores.RuStore}}" rel="noopener">RuStore</a>{{end}}
   {{if .Stores.GooglePlay}}<a class="store" href="{{.Stores.GooglePlay}}" rel="noopener">Google Play</a>{{end}}
   {{if .Stores.AppStore}}<a class="store" href="{{.Stores.AppStore}}" rel="noopener">App Store</a>{{end}}
 </div>{{end}}
+
+{{define "web"}}{{if .WebApp}}<a class="btn" href="{{.WebApp}}{{.WebPath}}">{{if .Artwork}}Купить в браузере{{else}}Открыть в браузере{{end}}</a>{{end}}{{end}}
 
 {{define "card"}}<a class="card" href="/a/{{.ID}}">
   {{if .Image}}<img src="{{.Image}}" alt="" loading="lazy"{{if .W}} style="aspect-ratio: {{.Ratio}}"{{end}}>{{end}}

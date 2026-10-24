@@ -93,3 +93,31 @@ func TestSiteExhibitionPage(t *testing.T) {
 		t.Fatalf("exhibition page: %d", code)
 	}
 }
+
+func TestWebAppForBrowsers(t *testing.T) {
+	artist := register(t, "artist")
+	a := publishArtwork(t, artist, "Работа для браузера", 9_000_00)
+
+	// страница работы предлагает купить в браузере — для тех, кто открыл ссылку в Telegram
+	if _, body, _ := getPage(t, "/a/"+a.ID); !strings.Contains(body, `href="/app/artwork/`+a.ID+`"`) {
+		t.Fatal("artwork page has no web app link")
+	}
+	// маршруты приложения отдают index.html, статика — с долгим кэшем
+	code, body, h := getPage(t, "/app/artwork/"+a.ID)
+	if code != 200 || !strings.Contains(body, "artista-webapp") || h.Get("Cache-Control") != "no-cache" {
+		t.Fatalf("app route: %d %q", code, h.Get("Cache-Control"))
+	}
+	code, _, h = getPage(t, "/app/_expo/static/js/app-123.js")
+	if code != 200 || !strings.Contains(h.Get("Cache-Control"), "immutable") {
+		t.Fatalf("static: %d %q", code, h.Get("Cache-Control"))
+	}
+	if code, _, _ := getPage(t, "/app/missing.js"); code != 404 {
+		t.Fatalf("missing asset: %d", code)
+	}
+	if code, body, _ := getPage(t, "/app/..%2f..%2fetc/passwd"); code == 200 && strings.Contains(body, "root:") {
+		t.Fatal("path traversal")
+	}
+	if code, _, _ := getPage(t, "/app"); code != 200 {
+		t.Fatalf("/app redirect: %d", code)
+	}
+}

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -108,6 +109,9 @@ func (s *Server) startAuction(w http.ResponseWriter, r *http.Request, u httpx.Us
 	if err != nil {
 		return err
 	}
+	if !s.socialLimiter.Allow("auction:" + u.ID) {
+		return httpx.TooMany()
+	}
 	var in struct {
 		StartKop int64 `json:"start_kop"`
 		Days     int   `json:"days"`
@@ -193,6 +197,9 @@ func (s *Server) placeBid(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	id, err := pathID(r, "id")
 	if err != nil {
 		return err
+	}
+	if !s.socialLimiter.Allow("bid:" + u.ID) {
+		return httpx.TooMany()
 	}
 	var in struct {
 		AmountKop int64 `json:"amount_kop"`
@@ -345,8 +352,12 @@ func (s *Server) closeAuction(ctx context.Context, id string) error {
 			_, err := tx.Exec(ctx, `UPDATE artworks SET status = 'published', updated_at = now() WHERE id = $1 AND status = 'auction'`, artworkID)
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE artworks SET status = 'reserved', updated_at = now() WHERE id = $1`, artworkID); err != nil {
+		tag, err := tx.Exec(ctx, `UPDATE artworks SET status = 'reserved', updated_at = now() WHERE id = $1 AND status = 'auction'`, artworkID)
+		if err != nil {
 			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return nil // работу скрыл модератор — бронь победителю не выдаём
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO price_locks (artwork_id, user_id, price_kop, source, source_id, expires_at)
 			VALUES ($1, $2, $3, 'auction', $4, $5)`, artworkID, *leader, *current, id, time.Now().Add(domain.AuctionCheckoutTTL))
@@ -365,5 +376,20 @@ func (s *Server) closeAuction(ctx context.Context, id string) error {
 		tr("«%s» за %s — оформите заказ в течение 48 часов", "“%s” for %s — place the order within 48 hours", title, rub(*current)), data)
 	s.notify(ctx, artistID, "auction_ended", tr("Аукцион завершён", "Auction ended"),
 		tr("«%s» — итоговая ставка %s. Ждём оформления заказа победителем.", "“%s” — winning bid %s. Waiting for the winner to place the order.", title, rub(*current)), data)
+	return nil
+}
+
+// cancelArtworkDeals отменяет живые аукционы, предложения и брони по работам, которые скрывает модератор
+// (where — условие на artworks a с параметром $1).
+func cancelArtworkDeals(ctx context.Context, tx pgx.Tx, where, arg string) error {
+	for _, q := range []string{
+		`UPDATE auctions SET status = 'cancelled', ended_at = now() WHERE status = 'live' AND artwork_id IN (SELECT a.id FROM artworks a WHERE ` + where + `)`,
+		`UPDATE offers SET status = 'expired', updated_at = now() WHERE status IN ('pending','countered','accepted') AND artwork_id IN (SELECT a.id FROM artworks a WHERE ` + where + `)`,
+		`UPDATE price_locks SET released_at = now() WHERE used_at IS NULL AND released_at IS NULL AND artwork_id IN (SELECT a.id FROM artworks a WHERE ` + where + `)`,
+	} {
+		if _, err := tx.Exec(ctx, q, arg); err != nil {
+			return fmt.Errorf("cancel deals: %w", err)
+		}
+	}
 	return nil
 }

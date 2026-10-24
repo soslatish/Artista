@@ -280,6 +280,8 @@ func (s *Server) commissionAction(w http.ResponseWriter, r *http.Request, u http
 		Reason         string  `json:"reason"`
 		DeliveryMethod string  `json:"delivery_method"`
 		Address        Address `json:"address"`
+		// ExpectedKop — цена, которую видел покупатель: если художник успел её изменить, заказ не создаём
+		ExpectedKop int64 `json:"expected_price_kop"`
 	}
 	if r.ContentLength != 0 {
 		if err := httpx.Decode(w, r, &in); err != nil {
@@ -335,6 +337,9 @@ func (s *Server) commissionAction(w http.ResponseWriter, r *http.Request, u http
 			heading = tr("Запрос отменён", "Request cancelled")
 			body = tr("Покупатель отменил запрос на заказ", "The buyer cancelled the commission request")
 		case !isArtist && action == "accept" && c.status == "quoted":
+			if in.ExpectedKop != 0 && c.quoteKop != nil && in.ExpectedKop != *c.quoteKop {
+				return httpx.Conflict("quote_changed", "Художник изменил цену — проверьте новое предложение")
+			}
 			orderID, err = s.acceptCommissionTx(r.Context(), tx, id, c, domain.DeliveryMethod(in.DeliveryMethod), in.Address)
 			if err != nil {
 				return err

@@ -51,11 +51,13 @@ export default function SearchScreen() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   // переход из «Сохранённых поисков»: применяем фильтры один раз на каждое новое значение параметра
-  const savedParam = useLocalSearchParams().filters;
-  const [appliedParam, setAppliedParam] = useState<unknown>(undefined);
-  if (savedParam !== appliedParam) {
-    setAppliedParam(savedParam);
-    const parsed = fromSavedParam(savedParam);
+  // k — метка нажатия: повторный выбор того же поиска тоже применяет фильтры
+  const params = useLocalSearchParams();
+  const savedKey = `${String(params.k ?? '')}|${String(params.filters ?? '')}`;
+  const [appliedKey, setAppliedKey] = useState('|');
+  if (savedKey !== appliedKey) {
+    setAppliedKey(savedKey);
+    const parsed = fromSavedParam(params.filters);
     if (parsed) {
       setFilters(parsed.panel);
       setText(parsed.q);
@@ -118,7 +120,7 @@ export default function SearchScreen() {
           </Pressable>
         </View>
       ) : null}
-      {query.isError ? (
+      {query.isError && !query.data ? (
         <ErrorState text={errorText(query.error)} onRetry={() => query.refetch()} />
       ) : (
         <Gallery
@@ -190,7 +192,7 @@ function FiltersSheet({ value, onClose, onApply }: SheetProps) {
           <T variant="title">{t('Фильтры')}</T>
           <Button title={t('Сбросить')} variant="ghost" onPress={() => (setDraft({ sort: 'new' }), setPriceMin(''), setPriceMax(''))} />
         </View>
-        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
           <Section title={t('Сортировка')}>
             {sorts.map((s) => (
               <Chip key={s.code} label={t(s.label)} selected={draft.sort === s.code} onPress={() => setDraft((d) => ({ ...d, sort: s.code }))} />

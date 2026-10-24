@@ -92,7 +92,7 @@ function Chat({ id, name }: { id: string; name: string }) {
       <Stack.Screen options={{ title: name || t('Диалог') }} />
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : q.isError && !q.data ? (
         <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />
       ) : (
         <FlatList

@@ -34,7 +34,7 @@ export default function StatsScreen() {
   const { user } = useSession();
   const q = useStats(user?.role === 'artist');
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   const s = q.data;
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>

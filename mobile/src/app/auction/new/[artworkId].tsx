@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
 import { keys, useArtwork } from '@/api/hooks';
@@ -53,8 +53,8 @@ function NewAuction({ artworkId }: { artworkId: string }) {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <T variant="artTitle">{a.title}</T>
         <T variant="body">{t('Подписчики получат уведомление о начале торгов. Шаг ставки — 5% от стартовой цены. Победитель оформляет заказ в течение 48 часов.')}</T>
         <Field label={t('Стартовая цена, ₽')} value={start} onChangeText={setStart} keyboardType="number-pad" placeholder={String(Math.round((a.price_kop * 0.7) / 100))} hint={t('Обычная цена работы — {p}', { p: formatPrice(a.price_kop) })} />
@@ -68,7 +68,7 @@ function NewAuction({ artworkId }: { artworkId: string }) {
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={t('Начать аукцион')} loading={busy} disabled={!kop} onPress={submit} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

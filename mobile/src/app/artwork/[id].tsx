@@ -31,7 +31,7 @@ export default function ArtworkRoute() {
 function ArtworkScreen({ id, src }: { id: string; src?: string }) {
   const q = useArtwork(id, src);
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <ArtworkView a={q.data} />;
 }
 

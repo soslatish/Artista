@@ -6,6 +6,7 @@ import { del, errorText } from '@/api/client';
 import { keys, useCatalogMeta, useSavedSearches } from '@/api/hooks';
 import type { SavedSearch } from '@/api/types';
 import { useSession } from '@/auth/session';
+import { SignInGate } from '@/features/sign-in-gate';
 import { useT } from '@/i18n';
 import { confirmAction, notify } from '@/lib/confirm';
 import { describeFilter } from '@/lib/filters';
@@ -31,8 +32,9 @@ export default function SavedSearchesScreen() {
       }
     }, { destructive: true });
 
+  if (!user) return <SignInGate text={t('Сохраняйте поиски и получайте уведомления о новых подходящих работах.')} />;
   if (q.isLoading) return <Loading />;
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <FlatList
       style={styles.root}
@@ -46,7 +48,7 @@ export default function SavedSearchesScreen() {
           <Pressable
             accessibilityRole="button"
             style={styles.flex}
-            onPress={() => router.navigate({ pathname: '/search', params: { filters: JSON.stringify(item.filters) } })}>
+            onPress={() => router.navigate({ pathname: '/search', params: { filters: JSON.stringify(item.filters), k: String(Date.now()) } })}>
             <T variant="bodyStrong">{item.title}</T>
             <T variant="small">{describeFilter(item.filters, meta.data, t)}</T>
           </Pressable>

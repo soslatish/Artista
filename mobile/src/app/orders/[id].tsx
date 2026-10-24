@@ -30,7 +30,7 @@ export default function OrderRoute() {
 function OrderScreen({ id }: { id: string }) {
   const q = useOrder(id);
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <OrderView o={q.data} refetch={() => q.refetch()} />;
 }
 

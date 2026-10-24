@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import { del, errorText } from '@/api/client';
 import { flatten, keys, useHistory } from '@/api/hooks';
 import { useSession } from '@/auth/session';
+import { SignInGate } from '@/features/sign-in-gate';
 import { useT } from '@/i18n';
 import { confirmAction, notify } from '@/lib/confirm';
 import { Gallery } from '@/ui/artwork';
@@ -30,7 +31,8 @@ export default function HistoryScreen() {
       }
     }, { destructive: true });
 
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!user) return <SignInGate text={t('Войдите, чтобы видеть работы, которые вы смотрели.')} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <View style={styles.root}>
       <Stack.Screen options={{ headerRight: () => (items.length ? <Button title={t('Очистить')} variant="ghost" onPress={clear} /> : null) }} />

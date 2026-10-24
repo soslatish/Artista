@@ -1,12 +1,18 @@
 // HTTP-клиент Artista API: JSON-конверт, ошибки по полям, автообновление access-токена.
+import { Platform } from 'react-native';
+
 import { currentLocale, t } from '@/i18n';
 
 import type { Tokens } from './types';
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+// Веб-версия раздаётся тем же сервером, что и API (/app/), поэтому без явного адреса
+// в браузере берём текущий домен — сборку не нужно пересобирать под каждый стенд.
+const sameOrigin = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin : '';
+
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || sameOrigin || 'http://localhost:8080').replace(/\/$/, '');
 
 /** Адрес сайта для ссылок «Поделиться» (по умолчанию — тот же сервер, что и API). */
-export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL ?? API_URL).replace(/\/$/, '');
+export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || API_URL).replace(/\/$/, '');
 
 export class ApiError extends Error {
   constructor(

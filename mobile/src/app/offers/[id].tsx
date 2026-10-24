@@ -25,7 +25,7 @@ export default function OfferRoute() {
 function OfferScreen({ id }: { id: string }) {
   const q = useOffer(id);
   if (q.isLoading) return <Loading />;
-  if (q.isError || !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return <OfferView o={q.data} />;
 }
 
@@ -58,7 +58,7 @@ function OfferView({ o }: { o: Offer }) {
   const counterKop = parseRubles(counter);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/artwork/[id]', params: { id: o.artwork.id } })} style={styles.item}>
         {o.artwork.image_url ? <Image source={{ uri: o.artwork.image_url }} style={styles.thumb} contentFit="cover" /> : <View style={styles.thumb} />}
         <View style={styles.flex}>

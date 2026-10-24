@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
 import { flatten, keys, useMyArtworks } from '@/api/hooks';
@@ -64,8 +64,8 @@ export default function NewPostScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <T variant="body">{t('Покажите процесс: эскиз, палитру, мастерскую. Пост увидят подписчики в ленте «Мастерские».')}</T>
         <Field label={t('Текст')} value={body} onChangeText={setBody} multiline maxLength={2000} placeholder={t('Над чем вы сейчас работаете?')} />
         <View style={styles.images}>
@@ -101,6 +101,7 @@ export default function NewPostScreen() {
                   </Pressable>
                 );
               })}
+              {works.hasNextPage ? <Button title={t('Ещё')} variant="ghost" loading={works.isFetchingNextPage} onPress={() => void works.fetchNextPage()} /> : null}
             </ScrollView>
           </>
         ) : null}
@@ -108,7 +109,7 @@ export default function NewPostScreen() {
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={t('Опубликовать')} loading={busy} disabled={uploading || (!body.trim() && !images.length)} onPress={publish} />
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

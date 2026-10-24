@@ -70,7 +70,7 @@ function ArtworksFeed({ feed, chips }: { feed: Exclude<Feed, 'posts'>; chips: Re
       {feed === 'new' ? <Showcase /> : null}
     </View>
   );
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <Gallery
       items={flatten(q.data)}
@@ -146,7 +146,7 @@ function PostsFeed({ header }: { header: React.ReactElement }) {
   const { user } = useSession();
   const q = usePostsFeed();
   if (q.isLoading) return <Loading />;
-  if (q.isError) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
+  if (q.isError && !q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   return (
     <FlashList
       data={flatten(q.data)}

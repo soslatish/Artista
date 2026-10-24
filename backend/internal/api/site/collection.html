@@ -2,6 +2,7 @@
 <section class="profile" aria-labelledby="col-name">
   <h1 id="col-name">{{.Collection.Title}}</h1>
   {{with .Collection.Subtitle}}<p class="meta">{{.}}</p>{{end}}
+  <div class="actions">{{template "web" .}}</div>
 </section>
 <section class="section" aria-label="Работы подборки">
   {{if .Works}}<div class="grid">{{range .Works}}{{template "card" .}}{{end}}</div>
