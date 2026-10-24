@@ -65,6 +65,7 @@ func (s *Server) artworkAssistant(w http.ResponseWriter, r *http.Request, u http
 	}
 	palette := []string{}
 	if in.ImageURL != "" {
+		in.ImageURL = s.canonicalFileURL(in.ImageURL)
 		if errs, err := s.validateImages(r.Context(), u.ID, []string{in.ImageURL}); err != nil {
 			return err
 		} else if errs == nil {

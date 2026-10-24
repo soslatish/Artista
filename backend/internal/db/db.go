@@ -98,3 +98,35 @@ func migrationNames() ([]string, error) {
 	sort.Strings(names)
 	return names, nil
 }
+
+// filePattern — ссылки на файлы, которые раздаёт сам API (/files/<имя>), с любым хостом.
+const filePattern = `^https?://[^/]+/files/([^/]+)$`
+
+// RebaseFileURLs переписывает ссылки на загруженные файлы под текущий PUBLIC_BASE_URL.
+// Адрес сервера может смениться (другой IP в локальной сети, новый домен) — без этого старые фото
+// перестают открываться и не проходят проверку «фото загружено через приложение». Если всё совпадает — ничего не делает.
+func RebaseFileURLs(ctx context.Context, pool *pgxpool.Pool, base string) (int64, error) {
+	prefix := strings.TrimRight(base, "/") + "/files/"
+	repl := prefix + `\1`
+	var total int64
+	scalar := []string{
+		`UPDATE uploads u SET url = regexp_replace(u.url, $1, $2) WHERE u.url ~ $1 AND left(u.url, length($3)) <> $3
+			AND NOT EXISTS (SELECT 1 FROM uploads x WHERE x.url = regexp_replace(u.url, $1, $2))`,
+		`UPDATE artwork_images SET url = regexp_replace(url, $1, $2) WHERE url ~ $1 AND left(url, length($3)) <> $3`,
+		`UPDATE users SET avatar_url = regexp_replace(avatar_url, $1, $2) WHERE avatar_url ~ $1 AND left(avatar_url, length($3)) <> $3`,
+		`UPDATE messages SET image_url = regexp_replace(image_url, $1, $2) WHERE image_url ~ $1 AND left(image_url, length($3)) <> $3`,
+		`UPDATE exhibitions SET cover_url = regexp_replace(cover_url, $1, $2) WHERE cover_url ~ $1 AND left(cover_url, length($3)) <> $3`,
+	}
+	for _, table := range []string{"posts", "commissions"} {
+		scalar = append(scalar, `UPDATE `+table+` SET images = ARRAY(SELECT regexp_replace(x, $1, $2) FROM unnest(images) WITH ORDINALITY t(x, o) ORDER BY o)
+			WHERE EXISTS (SELECT 1 FROM unnest(images) x WHERE x ~ $1 AND left(x, length($3)) <> $3)`)
+	}
+	for _, q := range scalar {
+		tag, err := pool.Exec(ctx, q, filePattern, repl, prefix)
+		if err != nil {
+			return total, fmt.Errorf("rebase file urls: %w", err)
+		}
+		total += tag.RowsAffected()
+	}
+	return total, nil
+}

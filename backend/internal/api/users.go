@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -114,6 +115,9 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	}
 	if in.Bio != nil && utf8.RuneCountInString(*in.Bio) > 1000 {
 		errs["bio"] = "«О себе» — до 1000 символов"
+	}
+	if in.AvatarURL != nil {
+		*in.AvatarURL = s.canonicalFileURL(*in.AvatarURL)
 	}
 	if in.AvatarURL != nil && *in.AvatarURL != "" && !s.isOwnFileURL(*in.AvatarURL) {
 		errs["avatar_url"] = "Загрузите фото через приложение"
@@ -398,10 +402,20 @@ func (s *Server) unfollow(w http.ResponseWriter, r *http.Request, u httpx.User) 
 
 // ---------- помощники ----------
 
+// fileURLRe — ссылка на файл, который раздаёт этот API. Хост может отличаться от PUBLIC_BASE_URL:
+// веб-версию открывают и по localhost, и по IP в локальной сети, и по домену.
+var fileURLRe = regexp.MustCompile(`^https?://[^/?#]+/files/([A-Za-z0-9._-]+)$`)
+
 func (s *Server) isOwnFileURL(u string) bool {
-	prefix := s.Config.PublicBaseURL + "/files/"
-	name, ok := strings.CutPrefix(u, prefix)
-	return ok && !strings.ContainsAny(name, "/\\") && name != ""
+	return fileURLRe.MatchString(u)
+}
+
+// canonicalFileURL приводит ссылку на свой файл к PUBLIC_BASE_URL — в базе хранится одна форма.
+func (s *Server) canonicalFileURL(u string) string {
+	if m := fileURLRe.FindStringSubmatch(u); m != nil {
+		return s.Config.PublicBaseURL + "/files/" + m[1]
+	}
+	return u
 }
 
 func isHTTPURL(s string) bool {

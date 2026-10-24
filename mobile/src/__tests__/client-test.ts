@@ -120,3 +120,21 @@ describe('refresh race with sign-out', () => {
     expect(currentAccessToken()).toBeNull();
   });
 });
+
+describe('rebaseFileUrls', () => {
+  it('points file links at the current address and leaves other values alone', () => {
+    const { rebaseFileUrls } = jest.requireActual('@/api/client') as typeof import('@/api/client');
+    const input = {
+      images: ['http://192.168.1.48:8080/files/abc.jpg', 'https://cdn.example.com/x.jpg'],
+      artist: { avatar_url: 'http://localhost:8090/files/a-1.webp', name: 'Анна' },
+      price_kop: 100,
+      note: 'see http://x/files/a.jpg here',
+    };
+    expect(rebaseFileUrls(input, 'http://localhost:8080')).toEqual({
+      images: ['http://localhost:8080/files/abc.jpg', 'https://cdn.example.com/x.jpg'],
+      artist: { avatar_url: 'http://localhost:8080/files/a-1.webp', name: 'Анна' },
+      price_kop: 100,
+      note: 'see http://x/files/a.jpg here',
+    });
+  });
+});

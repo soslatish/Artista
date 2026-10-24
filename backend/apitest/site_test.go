@@ -1,11 +1,14 @@
 package apitest
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/soslatish/artista/backend/internal/db"
 )
 
 func getPage(t *testing.T, path string) (int, string, http.Header) {
@@ -119,5 +122,35 @@ func TestWebAppForBrowsers(t *testing.T) {
 	}
 	if code, _, _ := getPage(t, "/app"); code != 200 {
 		t.Fatalf("/app redirect: %d", code)
+	}
+}
+
+func TestRebaseFileURLsAfterAddressChange(t *testing.T) {
+	artist := register(t, "artist")
+	a := publishArtwork(t, artist, "Работа со старым адресом", 9_000_00)
+	ctx := context.Background()
+	// сервер «переехал» на другой адрес, затем вернулся — ссылки следуют за ним
+	if _, err := db.RebaseFileURLs(ctx, pool, "http://192.168.0.77:8080"); err != nil {
+		t.Fatal(err)
+	}
+	var moved string
+	if err := pool.QueryRow(ctx, `SELECT url FROM artwork_images WHERE artwork_id = $1 LIMIT 1`, a.ID).Scan(&moved); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(moved, "http://192.168.0.77:8080/files/") {
+		t.Fatalf("not rebased: %s", moved)
+	}
+	n, err := db.RebaseFileURLs(ctx, pool, ts.URL)
+	if err != nil || n == 0 {
+		t.Fatalf("rebase back: %d %v", n, err)
+	}
+	// после возврата работа снова редактируется: фото проходят проверку «загружено через приложение»
+	var got artwork
+	call(t, "GET", "/api/v1/artworks/"+a.ID, artist.Access, nil).into(t, &got)
+	if len(got.Images) == 0 || !strings.HasPrefix(got.Images[0], ts.URL+"/files/") {
+		t.Fatalf("images: %v", got.Images)
+	}
+	if n, _ := db.RebaseFileURLs(ctx, pool, ts.URL); n != 0 {
+		t.Fatalf("second run changed %d rows", n)
 	}
 }

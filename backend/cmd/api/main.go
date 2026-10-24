@@ -42,6 +42,11 @@ func run(log *slog.Logger) error {
 	if err := db.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	if n, err := db.RebaseFileURLs(ctx, pool, cfg.PublicBaseURL); err != nil {
+		return err
+	} else if n > 0 {
+		log.Info("file links moved to the current address", "rows", n, "base", cfg.PublicBaseURL)
+	}
 
 	srv := api.New(api.Deps{
 		Config:   cfg,

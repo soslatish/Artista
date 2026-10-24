@@ -150,7 +150,9 @@ func (s *Server) catalogMeta(w http.ResponseWriter, _ *http.Request) error {
 
 // validateImages: фото загружены через наш API и (если загрузка учтена) — этим же пользователем.
 func (s *Server) validateImages(ctx context.Context, userID string, urls []string) (map[string]string, error) {
-	for _, u := range urls {
+	// приводим к PUBLIC_BASE_URL на месте: вызывающий сохраняет уже канонические ссылки
+	for i, u := range urls {
+		urls[i] = s.canonicalFileURL(u)
 		if !s.isOwnFileURL(u) {
 			return map[string]string{"images": "Фото должны быть загружены через приложение"}, nil
 		}

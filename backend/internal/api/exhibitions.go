@@ -163,6 +163,7 @@ func (s *Server) validateExhibition(ctx context.Context, in exhibitionInput, use
 		}
 	}
 	if in.CoverURL != nil && *in.CoverURL != "" {
+		*in.CoverURL = s.canonicalFileURL(*in.CoverURL)
 		imgErrs, err := s.validateImages(ctx, userID, []string{*in.CoverURL})
 		if err != nil {
 			return nil, err

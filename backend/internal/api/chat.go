@@ -231,6 +231,7 @@ func (s *Server) sendMessage(w http.ResponseWriter, r *http.Request, u httpx.Use
 		return err
 	}
 	if in.ImageURL != "" {
+		in.ImageURL = s.canonicalFileURL(in.ImageURL)
 		errs, err := s.validateImages(r.Context(), u.ID, []string{in.ImageURL})
 		if err != nil {
 			return err

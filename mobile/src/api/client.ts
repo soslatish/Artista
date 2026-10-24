@@ -61,6 +61,25 @@ export interface Envelope<T> {
   meta?: Record<string, unknown>;
 }
 
+const fileUrlRe = /^https?:\/\/[^/?#]+\/files\/([A-Za-z0-9._-]+)$/;
+
+/**
+ * В браузере ссылки на фото ведём на тот же адрес, с которого открыта веб-версия: сервер мог записать
+ * в ссылку другой адрес (IP в локальной сети, старый домен), недоступный с этого устройства.
+ * Сервер принимает такие ссылки обратно и сам приводит их к своему адресу.
+ */
+export function rebaseFileUrls<T>(value: T, base: string): T {
+  if (typeof value === 'string') {
+    const m = fileUrlRe.exec(value);
+    return (m ? `${base}/files/${m[1]}` : value) as T;
+  }
+  if (Array.isArray(value)) return value.map((v) => rebaseFileUrls(v, base)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rebaseFileUrls(v, base)])) as T;
+  }
+  return value;
+}
+
 function buildUrl(path: string, query?: RequestOptions['query']): string {
   const qs = Object.entries(query ?? {})
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
@@ -101,6 +120,7 @@ async function rawRequest<T>(path: string, opts: RequestOptions, token: string |
       error: new ApiError(res.status, e?.code ?? 'http_error', e?.message ?? t('Что-то пошло не так. Попробуйте ещё раз.'), e?.fields ?? {}),
     };
   }
+  if (sameOrigin && !process.env.EXPO_PUBLIC_API_URL) json = rebaseFileUrls(json, API_URL);
   return { status: res.status, env: { data: json.data as T, meta: json.meta } };
 }
 
