@@ -1,0 +1,33 @@
+{{define "content"}}
+{{with .Artwork}}
+<article class="artwork">
+  <div>
+    <div class="artwork__view">
+      {{if .Image}}<img src="{{.Image}}" alt="{{.Title}}, {{.ArtistName}}">{{end}}
+    </div>
+    {{if gt (len .Images) 1}}
+    <div class="artwork__thumbs" aria-label="Другие фото">
+      {{range .Images}}<a href="{{.}}"><img src="{{.}}" alt="" loading="lazy"></a>{{end}}
+    </div>
+    {{end}}
+  </div>
+  <div class="museum-label">
+    {{with .StatusText}}<span class="status">{{.}}</span>{{end}}
+    <h1>{{.Title}}</h1>
+    <a class="artist" href="/u/{{.ArtistID}}">{{.ArtistName}}{{if .ArtistPremium}}<span class="premium-mark" title="Премиум-художник"></span>{{end}}</a>
+    <p class="facts">{{.Facts}}{{with .Year}}, {{.}}{{end}}{{with .ArtistCity}}<br>{{.}}{{end}}</p>
+    <p class="price">{{if .AuctionKop}}Ставка {{rub .AuctionKop}}{{else}}{{rub .PriceKop}}{{end}}</p>
+    {{with .Description}}<p class="desc">{{.}}</p>{{end}}
+    <a class="btn only-touch" href="artista://artwork/{{.ID}}">Открыть в приложении</a>
+    <p class="trust">Купить работу можно в приложении Artista. Оплата хранится у нас, пока вы не подтвердите получение.</p>
+    {{template "stores" $}}
+  </div>
+</article>
+{{end}}
+{{if .Similar}}
+<section class="section" aria-labelledby="sim-title">
+  <h2 id="sim-title">Похожие работы</h2>
+  <div class="grid">{{range .Similar}}{{template "card" .}}{{end}}</div>
+</section>
+{{end}}
+{{end}}

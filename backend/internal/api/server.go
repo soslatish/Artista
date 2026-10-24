@@ -182,6 +182,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	}
 
 	mux.HandleFunc("GET /healthz", s.h(s.health))
+	s.siteRoutes(mux)
 	mux.HandleFunc("GET /files/{name}", s.serveFile)
 
 	// Аккаунт

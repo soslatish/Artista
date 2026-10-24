@@ -1,0 +1,21 @@
+{{define "content"}}
+{{with .Profile}}
+<section class="profile" aria-labelledby="artist-name">
+  <div class="profile__head">
+    {{if .AvatarURL}}<img class="avatar" src="{{.AvatarURL}}" alt="">{{else}}<span class="avatar avatar--empty" aria-hidden="true">{{initial .Name}}</span>{{end}}
+    <div>
+      <h1 id="artist-name">{{.Name}}{{if .IsPremium}}<span class="premium-mark" title="Премиум-художник"></span>{{end}}</h1>
+      <p class="meta">{{if eq .Role "artist"}}Художник{{else}}Коллекционер{{end}}{{with .City}}, {{.}}{{end}}{{if .Rating}}, рейтинг {{rating .Rating}} из 5{{end}}</p>
+    </div>
+  </div>
+  {{if .OnVacation}}<p class="notice">Художник взял паузу{{with .VacationUntil}} до {{date .}}{{end}}.{{with .VacationNote}} {{.}}{{end}}</p>{{end}}
+  {{with .Bio}}<p class="bio">{{.}}</p>{{end}}
+  {{if .AcceptsCommissions}}<p class="notice">Принимает заказы{{with .CommissionNote}}: {{sentence .}}{{end}}. Оформить заказ можно в приложении.</p>{{end}}
+  <div><a class="btn only-touch" href="artista://artist/{{.ID}}">Открыть в приложении</a></div>
+</section>
+{{end}}
+<section class="section" aria-label="Работы художника">
+  {{if .Works}}<div class="grid">{{range .Works}}{{template "card" .}}{{end}}</div>
+  {{else}}<p>Работ в продаже пока нет.</p>{{end}}
+</section>
+{{end}}

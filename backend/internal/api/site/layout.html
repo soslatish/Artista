@@ -1,0 +1,66 @@
+{{define "layout"}}<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<link rel="canonical" href="{{.Canonical}}">
+<meta property="og:site_name" content="Artista">
+<meta property="og:type" content="{{if .OGType}}{{.OGType}}{{else}}website{{end}}">
+<meta property="og:title" content="{{.OGTitle}}">
+<meta property="og:description" content="{{.Description}}">
+<meta property="og:url" content="{{.Canonical}}">
+<meta property="og:image" content="{{.Image}}">
+<meta property="og:locale" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#622D32">
+{{if .AppPath}}<meta name="apple-itunes-app" content="app-argument=artista://{{.AppPath}}">{{end}}
+{{if .NoIndex}}<meta name="robots" content="noindex">{{end}}
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="preload" href="/static/Manrope_400Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/site.css?v={{.Version}}">
+</head>
+<body>
+<a class="skip" href="#main">К содержанию</a>
+<header class="band">
+  <div class="band__inner">
+    <a class="band__logo" href="/" aria-label="Artista — на главную"><img src="/static/wordmark.webp" width="144" height="78" alt="Artista"></a>
+    <nav aria-label="Разделы">
+      <a href="/#works">Работы</a>
+      <a class="optional" href="/#artists">Художникам</a>
+      <a href="/#app">Приложение</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+{{template "content" .}}
+</main>
+<footer class="foot">
+  <div class="foot__inner">
+    <span>© {{.Year}} Artista — оригинальные работы художников</span>
+    <nav aria-label="Документы">
+      <a href="/legal/terms">Пользовательское соглашение</a>
+      <a href="/legal/privacy">Политика конфиденциальности</a>
+      {{with .SupportEmail}}<a href="mailto:{{.}}">Связаться</a>{{end}}
+    </nav>
+  </div>
+</footer>
+</body>
+</html>{{end}}
+
+{{define "stores"}}<div class="stores">
+  {{if .Stores.RuStore}}<a class="store" href="{{.Stores.RuStore}}" rel="noopener">RuStore</a>{{end}}
+  {{if .Stores.GooglePlay}}<a class="store" href="{{.Stores.GooglePlay}}" rel="noopener">Google Play</a>{{end}}
+  {{if .Stores.AppStore}}<a class="store" href="{{.Stores.AppStore}}" rel="noopener">App Store</a>{{end}}
+</div>{{end}}
+
+{{define "card"}}<a class="card" href="/a/{{.ID}}">
+  {{if .Image}}<img src="{{.Image}}" alt="" loading="lazy"{{if .W}} style="aspect-ratio: {{.Ratio}}"{{end}}>{{end}}
+  <span class="card__label">
+    <span class="art-title">{{.Title}}</span>
+    {{.ArtistName}}{{with .Facts}}, {{.}}{{end}}<br>
+    <span class="card__price">{{rub .PriceKop}}</span>{{with .StatusText}}, {{.}}{{end}}
+  </span>
+</a>{{end}}

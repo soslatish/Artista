@@ -1,0 +1,73 @@
+{{define "content"}}
+<section class="lead" aria-labelledby="lead-title">
+  <div class="lead__inner">
+    <h1 id="lead-title">Оригинальные работы прямо из мастерских</h1>
+    <div style="display:grid; gap:1.25rem">
+      <p>Живопись, графика и скульптура от художников из разных городов России. Деньги уходят автору только после того, как работа у вас.</p>
+      <div id="app">{{template "stores" .}}</div>
+    </div>
+  </div>
+</section>
+
+<section class="wall" aria-label="Новые работы в настоящем масштабе">
+  {{if .Wall}}
+  <div class="wall__hang">
+    {{range $i, $w := .Wall}}
+    <a class="work" href="/a/{{$w.ID}}" style="--w: {{$w.W}}; --ratio: {{$w.Ratio}}; --i: {{$i}}">
+      <div class="work__frame">{{if $w.Image}}<img src="{{$w.Image}}" alt="{{$w.Title}}, {{$w.ArtistName}}" loading="lazy">{{end}}</div>
+      <span class="work__label"><b class="art-title">{{$w.Title}}</b>{{$w.ArtistName}}<br>{{$w.Facts}}<br>{{rub $w.PriceKop}}</span>
+    </a>
+    {{end}}
+  </div>
+  <div class="ruler" aria-hidden="true"><span></span><span>50 см — работы на стене в настоящем масштабе</span></div>
+  {{else}}
+  <p class="wall__empty">Скоро здесь появятся первые работы.</p>
+  {{end}}
+</section>
+
+<section class="section" aria-labelledby="deal-title">
+  <h2 id="deal-title">Как проходит покупка</h2>
+  <ol class="steps">
+    <li><b>Вы оплачиваете</b><p>Деньги хранятся у Artista, художник их пока не получает.</p></li>
+    <li><b>Художник отправляет</b><p>У него 24 часа на подтверждение и 48 часов на отправку с трек-номером.</p></li>
+    <li><b>Вы получаете работу</b><p>Проверяете посылку и подтверждаете получение в приложении.</p></li>
+    <li><b>Автор получает оплату</b><p>А вы — сертификат подлинности с QR-кодом.</p></li>
+  </ol>
+</section>
+
+{{if .Exhibitions}}
+<section class="section" aria-labelledby="ex-title">
+  <h2 id="ex-title">Выставки</h2>
+  <div class="grid">
+    {{range .Exhibitions}}
+    <a class="card" href="/e/{{.ID}}">
+      {{if .CoverURL}}<img src="{{.CoverURL}}" alt="" loading="lazy">{{end}}
+      <span class="card__label"><span class="art-title">{{.Title}}</span>{{.Artist.Name}}<br>
+        {{if eq .Status "open"}}Открыта{{else}}Откроется {{datetime .StartsAt}}{{end}}</span>
+    </a>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
+<section class="section" id="works" aria-labelledby="works-title">
+  <h2 id="works-title">Новые работы</h2>
+  {{if .Recent}}<div class="grid">{{range .Recent}}{{template "card" .}}{{end}}</div>
+  {{else}}<p>Работы появятся, как только художники их опубликуют.</p>{{end}}
+</section>
+
+<section class="section" id="artists" aria-labelledby="artists-title">
+  <div class="artists">
+    <div style="display:grid; gap:1.25rem">
+      <h2 id="artists-title">Продавайте свои работы</h2>
+      <p style="color:var(--graphite); max-width:var(--measure)">Публикация бесплатная. Мы берём комиссию только с продажи, а доставку и защиту оплаты берём на себя. Принимайте заказы на портреты и картины под интерьер, проводите онлайн-выставки и аукционы.</p>
+      <div>{{template "stores" .}}</div>
+    </div>
+    <dl class="terms">
+      <div><dt>0 ₽</dt><dd>за размещение работ, без ограничений по количеству</dd></div>
+      <div><dt>15%</dt><dd>комиссия с проданной работы — только когда покупатель получил её</dd></div>
+      <div><dt>990 ₽</dt><dd>в месяц Премиум: 0% комиссии с продаж до 100 000 ₽, отметка в ленте и расширенная статистика</dd></div>
+    </dl>
+  </div>
+</section>
+{{end}}

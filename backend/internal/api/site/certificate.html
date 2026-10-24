@@ -1,0 +1,40 @@
+{{define "content"}}
+{{with .Certificate}}
+<div class="cert">
+  <article class="cert__sheet" aria-labelledby="cert-title">
+    <div class="cert__head">
+      <div>
+        <h1 id="cert-title">Сертификат подлинности</h1>
+        <p class="cert__code">{{.Code}}</p>
+        {{if eq .Status "active"}}<p class="cert__valid">Действителен</p>{{else}}<p class="cert__void">Передан новому владельцу</p>{{end}}
+      </div>
+      <img class="cert__qr" src="/api/v1/certificates/{{.Code}}/qr.png" width="132" height="132" alt="QR-код для проверки сертификата">
+    </div>
+    <div class="cert__work">
+      {{if .Artwork.ImageURL}}<img src="{{.Artwork.ImageURL}}" alt="">{{end}}
+      <div>
+        <span class="art-title">{{.Artwork.Title}}</span>
+        <table>
+          <tr><th scope="row">Автор</th><td><a href="/u/{{.Artist.ID}}">{{.Artist.Name}}</a></td></tr>
+          <tr><th scope="row">Размер</th><td>{{size .Artwork.WidthCm .Artwork.HeightCm .Artwork.DepthCm}}</td></tr>
+          {{with .Artwork.Materials}}<tr><th scope="row">Материалы</th><td>{{.}}</td></tr>{{end}}
+          {{with .Artwork.Year}}<tr><th scope="row">Год</th><td>{{.}}</td></tr>{{end}}
+          <tr><th scope="row">Владелец</th><td>{{.Owner}}</td></tr>
+          <tr><th scope="row">Выдан</th><td>{{date .IssuedAt}}</td></tr>
+        </table>
+      </div>
+    </div>
+    {{if gt (len .History) 1}}
+    <div>
+      <h2 style="font-size:1.1rem; margin-bottom:.5rem">История владения</h2>
+      <table>
+        {{range .History}}<tr><th scope="row">{{.Owner}}</th><td>с {{date .IssuedAt}}{{if eq .Status "active"}} по настоящее время{{end}}</td></tr>{{end}}
+      </table>
+    </div>
+    {{end}}
+    <p style="color:var(--graphite); font-size:.9rem">Сертификат выпущен Artista после завершения сделки: покупатель получил работу, художник — оплату. Подлинность можно проверить по этой странице или QR-коду.</p>
+    <div class="no-print"><button class="btn btn--line" type="button" onclick="window.print()">Распечатать</button></div>
+  </article>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,256 @@
+/* Artista — сайт. Главный приём: работы висят на «стене» в настоящем масштабе,
+   центрами на одной линии взгляда, как в галерее. Всё остальное — тихо. */
+
+@font-face { font-family: "Manrope"; src: url("/static/Manrope_400Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Manrope"; src: url("/static/Manrope_600SemiBold.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Manrope"; src: url("/static/Manrope_700Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Cormorant"; src: url("/static/CormorantGaramond_600SemiBold_Italic.woff2") format("woff2"); font-weight: 600; font-style: italic; font-display: swap; }
+@font-face { font-family: "Cormorant"; src: url("/static/CormorantGaramond_500Medium_Italic.woff2") format("woff2"); font-weight: 500; font-style: italic; font-display: swap; }
+
+:root {
+  --wall: #ECE8E3;      /* стена галереи: серо-бежевая штукатурка */
+  --wall-deep: #E2DDD6;
+  --label: #FFFFFF;     /* этикетка */
+  --ink: #1E1A1B;
+  --graphite: #6E6668;
+  --hairline: #D2CBC4;
+  --bordeaux: #622D32;  /* из логотипа */
+  --bordeaux-ink: #FFFFFF;
+  --gold: #C9A24B;      /* мазок логотипа — только отметки */
+  --success: #3F6B4C;
+  --accent: #622D32;    /* цифры шагов, код сертификата */
+  --cm: 2.4px;          /* сколько пикселей в сантиметре на стене */
+  --sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Cormorant", "Cormorant Garamond", Georgia, serif;
+  --measure: 38rem;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wall: #221F20;
+    --wall-deep: #1A1718;
+    --label: #2C2829;
+    --ink: #EEE9E4;
+    --graphite: #ADA4A6;
+    --hairline: #423B3D;
+    --accent: #C9A24B;
+    --success: #7FB08D;
+    color-scheme: dark;
+  }
+}
+
+@media (min-width: 900px) { :root { --cm: 2.9px; } }
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--wall);
+  color: var(--ink);
+  font: 400 1rem/1.6 var(--sans);
+}
+img { display: block; max-width: 100%; }
+button { font: inherit; cursor: pointer; }
+a { color: inherit; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+h1, h2, h3 { margin: 0; line-height: 1.15; letter-spacing: -0.02em; }
+p { margin: 0; }
+
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--label); padding: .5rem 1rem; z-index: 10; }
+
+/* ---------- шапка ---------- */
+
+.band { background: var(--bordeaux); color: var(--bordeaux-ink); }
+.band__inner {
+  max-width: 76rem; margin: 0 auto; padding: .75rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+}
+.band__logo img { width: 144px; height: auto; }
+.band nav { display: flex; gap: 1.5rem; font-weight: 600; font-size: .95rem; }
+.band nav a { text-decoration: none; opacity: .88; }
+.band nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
+@media (max-width: 560px) { .band nav .optional { display: none; } }
+
+/* ---------- первый экран ---------- */
+
+.lead { background: var(--bordeaux); color: var(--bordeaux-ink); padding: 1.5rem 1.25rem 3.5rem; }
+.lead__inner { max-width: 76rem; margin: 0 auto; display: grid; gap: 1.5rem; }
+.lead h1 { font-size: clamp(2.1rem, 5.2vw, 3.6rem); font-weight: 700; max-width: 15ch; }
+.lead p { max-width: var(--measure); font-size: 1.1rem; opacity: .9; }
+@media (min-width: 900px) {
+  .lead__inner { grid-template-columns: 1.3fr 1fr; align-items: end; }
+}
+
+.stores { display: flex; flex-wrap: wrap; gap: .75rem; }
+.store {
+  display: inline-flex; align-items: center; min-height: 48px; padding: 0 1.25rem;
+  border-radius: 10px; font-weight: 600; text-decoration: none;
+  background: var(--label); color: var(--bordeaux);
+}
+.band .store, .lead .store { background: #FFFFFF; color: #622D32; }
+.store--ghost { background: transparent !important; color: inherit !important; border: 1px solid currentColor; }
+.store:hover { filter: brightness(.96); }
+.museum-label .store { background: var(--bordeaux); color: var(--bordeaux-ink); }
+
+/* ---------- стена: работы в настоящем масштабе ---------- */
+
+.wall {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.05), transparent 24px),
+    var(--wall);
+  padding: 4rem 0 7rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.wall__hang {
+  display: flex; align-items: center;  /* центры работ — на одной линии взгляда */
+  gap: calc(22 * var(--cm));
+  width: max-content; margin: 0 auto; padding: 0 2rem;
+  min-height: calc(130 * var(--cm));
+}
+.work { position: relative; flex: none; text-decoration: none; }
+.work__frame {
+  width: calc(var(--w) * var(--cm));
+  aspect-ratio: var(--ratio);
+  background: var(--wall-deep);
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 18px 28px -18px rgba(0,0,0,.45);
+}
+.work__frame img { width: 100%; height: 100%; object-fit: cover; }
+.work__label {
+  position: absolute; top: calc(100% + 18px); left: 0;
+  width: max(150px, calc(var(--w) * var(--cm)));
+  padding: .55rem .7rem; background: var(--label);
+  font-size: .78rem; line-height: 1.4; color: var(--graphite);
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
+}
+.work__label b { display: block; color: var(--ink); font-weight: 600; }
+.work:hover .work__frame, .work:focus-visible .work__frame { outline: 2px solid var(--gold); outline-offset: 6px; }
+.art-title { font-family: var(--serif); font-style: italic; font-weight: 600; color: var(--ink); font-size: 1.15em; letter-spacing: 0; }
+
+.ruler {
+  position: absolute; left: 1.25rem; bottom: 1.5rem;
+  display: flex; align-items: center; gap: .6rem; font-size: .78rem; color: var(--graphite);
+}
+.ruler span:first-child {
+  width: calc(50 * var(--cm)); height: 6px;
+  border: 1px solid var(--graphite); border-top: 0;
+}
+.wall__empty { text-align: center; color: var(--graphite); padding: 4rem 1rem; }
+
+/* ---------- секции ---------- */
+
+.section { max-width: 76rem; margin: 0 auto; padding: 4.5rem 1.25rem; }
+.section + .section { padding-top: 0; }
+.section h2 { font-size: clamp(1.6rem, 3.2vw, 2.3rem); font-weight: 700; margin-bottom: 1.75rem; max-width: 22ch; }
+.section > p { max-width: var(--measure); color: var(--graphite); margin-bottom: 1.5rem; }
+
+/* сделка — настоящая последовательность, поэтому шаги пронумерованы */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--hairline); counter-reset: step; }
+.steps li { background: var(--wall); padding: 1.25rem 1.25rem 1.5rem 0; counter-increment: step; }
+.steps li::before { content: counter(step); display: block; font-weight: 700; font-size: 2.4rem; line-height: 1; color: var(--accent); margin-bottom: .75rem; }
+.steps b { display: block; margin-bottom: .25rem; }
+.steps p { color: var(--graphite); font-size: .95rem; max-width: 24ch; }
+@media (min-width: 760px) { .steps { grid-template-columns: repeat(4, 1fr); } .steps li { padding-left: 1.25rem; } .steps li:first-child { padding-left: 0; } }
+
+.artists { display: grid; gap: 2.5rem; align-items: start; }
+@media (min-width: 860px) { .artists { grid-template-columns: 1fr 1fr; } }
+.terms { margin: 0; display: grid; gap: 1.1rem; }
+.terms div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 1rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--hairline); }
+.terms dt { font-weight: 700; font-size: 1.35rem; line-height: 1.2; }
+.terms dd { margin: 0; color: var(--graphite); }
+
+/* ---------- сетка работ ---------- */
+
+.grid { columns: 2 11rem; column-gap: 1.25rem; }
+@media (min-width: 900px) { .grid { columns: 4 14rem; column-gap: 1.75rem; } }
+.card { display: block; break-inside: avoid; margin-bottom: 1.75rem; text-decoration: none; }
+.card img { width: 100%; height: auto; background: var(--wall-deep); }
+.card__label { padding-top: .55rem; font-size: .85rem; color: var(--graphite); line-height: 1.45; }
+.card__label .art-title { display: block; font-size: 1.2rem; line-height: 1.2; }
+.card__price { color: var(--ink); font-weight: 700; }
+.card:hover img { outline: 2px solid var(--gold); outline-offset: 4px; }
+
+/* ---------- страница работы ---------- */
+
+.artwork { max-width: 76rem; margin: 0 auto; padding: 2.5rem 1.25rem 1rem; display: grid; gap: 2rem; }
+@media (min-width: 900px) { .artwork { grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr); align-items: start; gap: 3rem; } }
+.artwork__view { background: var(--wall-deep); padding: clamp(1rem, 4vw, 3rem); display: grid; place-items: center; }
+.artwork__view img { max-height: 78vh; width: auto; box-shadow: 0 18px 30px -16px rgba(0,0,0,.45); }
+.artwork__thumbs { display: flex; gap: .5rem; margin-top: .75rem; overflow-x: auto; }
+.artwork__thumbs img { width: 72px; height: 72px; object-fit: cover; }
+.museum-label { background: var(--label); padding: 1.5rem; display: grid; gap: .9rem; }
+.museum-label h1 { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: clamp(2rem, 4vw, 2.6rem); letter-spacing: 0; line-height: 1.05; }
+.museum-label .artist { font-weight: 600; text-decoration: none; }
+.museum-label .artist:hover { text-decoration: underline; }
+.museum-label .facts { color: var(--graphite); font-size: .95rem; }
+.museum-label .price { font-size: 1.6rem; font-weight: 700; }
+.museum-label .desc { color: var(--ink); white-space: pre-line; max-width: var(--measure); }
+.status { display: inline-block; font-size: .85rem; font-weight: 600; color: var(--graphite); }
+.trust { font-size: .9rem; color: var(--graphite); border-top: 1px solid var(--hairline); padding-top: .9rem; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 1.25rem;
+  border-radius: 10px; font-weight: 600; text-decoration: none; background: var(--bordeaux); color: var(--bordeaux-ink);
+}
+.btn--line { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+.only-touch { display: none; }
+@media (hover: none) { .only-touch { display: inline-flex; } }
+
+/* ---------- художник, выставка, подборка ---------- */
+
+.profile { max-width: 76rem; margin: 0 auto; padding: 3rem 1.25rem 1rem; display: grid; gap: 1rem; }
+.profile__head { display: flex; gap: 1.25rem; align-items: center; }
+.avatar { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; background: var(--wall-deep); flex: none; }
+.avatar--empty { display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-size: 2.2rem; color: var(--accent); }
+.profile h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); font-weight: 700; }
+.profile .meta { color: var(--graphite); }
+.profile .bio { max-width: var(--measure); white-space: pre-line; }
+.premium-mark { display: inline-block; width: .7em; height: .7em; border-radius: 50%; background: var(--gold); vertical-align: .15em; margin-left: .35em; }
+.notice { background: var(--label); padding: .9rem 1.1rem; border-left: 3px solid var(--gold); max-width: var(--measure); }
+
+/* ---------- сертификат ---------- */
+
+.cert { max-width: 52rem; margin: 2.5rem auto 4rem; padding: 0 1.25rem; }
+.cert__sheet { background: var(--label); padding: clamp(1.5rem, 5vw, 3.5rem); display: grid; gap: 1.75rem; border: 1px solid var(--hairline); }
+.cert__head { display: flex; justify-content: space-between; gap: 1.5rem; align-items: start; flex-wrap: wrap; }
+.cert__head h1 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 700; }
+.cert__code { font-weight: 700; font-size: 1.3rem; letter-spacing: .06em; color: var(--accent); }
+.cert__work { display: grid; gap: 1.5rem; }
+@media (min-width: 640px) { .cert__work { grid-template-columns: 14rem 1fr; } }
+.cert__work img { width: 100%; height: auto; }
+.cert__work .art-title { font-size: 2rem; line-height: 1.1; display: block; margin-bottom: .5rem; }
+.cert table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.cert th, .cert td { text-align: left; padding: .55rem 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.cert th { font-weight: 600; width: 40%; }
+.cert__qr { width: 132px; height: 132px; image-rendering: pixelated; }
+.cert__valid { color: var(--success); font-weight: 700; }
+.cert__void { color: var(--graphite); font-weight: 700; }
+
+/* ---------- текстовые страницы ---------- */
+
+.prose { max-width: 44rem; margin: 0 auto; padding: 3rem 1.25rem 4rem; }
+.prose h1 { font-size: clamp(1.8rem, 3.6vw, 2.4rem); font-weight: 700; margin-bottom: 1.5rem; }
+.prose h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; }
+.prose p, .prose li { color: var(--ink); margin-bottom: .75rem; }
+.prose .draft { background: var(--label); border-left: 3px solid var(--gold); padding: .9rem 1.1rem; margin-bottom: 2rem; }
+
+/* ---------- подвал ---------- */
+
+.foot { border-top: 1px solid var(--hairline); }
+.foot__inner { max-width: 76rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; color: var(--graphite); font-size: .9rem; }
+.foot nav { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .wall__hang .work { animation: hang .7s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 70ms); }
+  @keyframes hang { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+}
+
+@media print {
+  .band, .foot, .no-print { display: none !important; }
+  body, .cert__sheet { background: #fff; color: #000; }
+  .cert { margin: 0; max-width: none; }
+  .cert__sheet { border: 0; }
+}

@@ -25,6 +25,7 @@ type Config struct {
 	AppleTeamID             string
 	// ссылки на магазины для сайта
 	StoreGooglePlay, StoreRuStore, StoreAppStore string
+	SupportEmail                                 string // адрес поддержки на сайте (необязательно)
 	UploadDir                                    string
 	MaxUploadBytes                               int64
 	PaymentsProvider                             string // stub
@@ -56,6 +57,7 @@ func Load() (Config, error) {
 		StoreGooglePlay:         env("STORE_GOOGLE_PLAY", "https://play.google.com/store/apps/details?id=com.aleksandr.artista"),
 		StoreRuStore:            env("STORE_RUSTORE", "https://www.rustore.ru/catalog/app/com.aleksandr.artista"),
 		StoreAppStore:           os.Getenv("STORE_APP_STORE"),
+		SupportEmail:            os.Getenv("SUPPORT_EMAIL"),
 		UploadDir:               env("UPLOAD_DIR", "./uploads"),
 		MaxUploadBytes:          int64Env("MAX_UPLOAD_BYTES", 10<<20),
 		PaymentsProvider:        env("PAYMENTS_PROVIDER", "stub"),

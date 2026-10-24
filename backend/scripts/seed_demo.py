@@ -181,15 +181,24 @@ def main():
         ("olga@demo.artista", "Лесная тропа", lambda: botanic(900, 700, rnd, (200, 210, 190), [(40, 80, 50), (90, 120, 60), (140, 160, 90)], (240, 220, 140)), "graphics", "realism", "watercolor", 40, 30, 7500, "Акварель. Подмосковный лес в мае."),
         ("olga@demo.artista", "Ночной сад", lambda: botanic(800, 800, rnd, (30, 40, 50), [(50, 90, 80), (30, 70, 70)], (230, 200, 120)), "graphics", "contemporary", "gouache", 35, 35, 11000, "Гуашь, тёмный фон, золотистые цветы."),
     ]
+    rooms = [["living"], ["bedroom", "living"], ["kitchen", "hallway"], ["living", "office"], ["office", "living"],
+             ["bedroom"], ["kids", "bedroom"], ["kitchen"], ["bedroom", "hallway"]]
+    # мастерские: заказы на заказ, серия
+    call("PATCH", "/me", toks["marina@demo.artista"], {"accepts_commissions": True, "commission_note": "Пишу портреты и виды Петербурга по фото, от 15 000 ₽, срок 2–3 недели."})
+    call("PATCH", "/me", toks["olga@demo.artista"], {"accepts_commissions": True, "commission_note": "Ботанические акварели под ваш интерьер, от 6 000 ₽."})
+    series = call("POST", "/me/series", toks["marina@demo.artista"], {"title": "Петербург", "description": "Город, залив и белые ночи."})
     created = []
-    for email, title, paint, cat, style, tech, wcm, hcm, price, desc in works:
+    for i, (email, title, paint, cat, style, tech, wcm, hcm, price, desc) in enumerate(works):
         tok = toks[email]
         imgs = [upload(tok, paint())]
-        a = call("POST", "/artworks", tok, {
+        body = {
             "title": title, "description": desc, "category": cat, "style": style, "technique": tech,
             "materials": "", "width_cm": wcm, "height_cm": hcm, "depth_cm": 2, "year": 2025,
-            "price_kop": price * 100, "images": imgs, "publish": True,
-        })
+            "price_kop": price * 100, "images": imgs, "publish": True, "rooms": rooms[i], "allow_offers": i % 2 == 1,
+        }
+        if email == "marina@demo.artista":
+            body["series_id"] = series["id"]
+        a = call("POST", "/artworks", tok, body)
         created.append(a)
         print("✓", title)
 
@@ -204,6 +213,40 @@ def main():
     pay = call("POST", f"/orders/{order['id']}/pay", buyer_tok)
     call("POST", f"/payments/{pay['id']}/stub-confirm", buyer_tok)
     call("POST", f"/orders/{order['id']}/confirm", toks["marina@demo.artista"])
+    # завершённая покупка — у покупателя появляется сертификат подлинности
+    done = call("POST", "/orders", buyer_tok, {"artwork_id": created[7]["id"], "delivery_method": "post", "address": {
+        "city": "Москва", "street": "ул. Покровка, д. 12, кв. 3", "postal_code": "101000", "recipient_name": "Алексей Покупатель", "phone": "+7 900 000-00-00", "comment": ""}})
+    pay = call("POST", f"/orders/{done['id']}/pay", buyer_tok)
+    call("POST", f"/payments/{pay['id']}/stub-confirm", buyer_tok)
+    call("POST", f"/orders/{done['id']}/confirm", toks["olga@demo.artista"])
+    call("POST", f"/orders/{done['id']}/ship", toks["olga@demo.artista"], {"tracking_number": "80081234567890"})
+    call("POST", f"/orders/{done['id']}/complete", buyer_tok)
+    call("POST", f"/orders/{done['id']}/review", buyer_tok, {"rating": 5, "text": "Акварель ещё красивее, чем на фото. Упаковано очень бережно."})
+
+    # торг, вопросы, посты
+    call("POST", f"/artworks/{created[3]['id']}/offers", buyer_tok, {"amount_kop": 52000_00, "message": "Готов забрать на этой неделе."})
+    q = call("POST", f"/artworks/{created[0]['id']}/questions", buyer_tok, {"body": "Можно ли повесить работу у окна, не выцветет?"})
+    call("POST", f"/questions/{q['id']}/answer", toks["marina@demo.artista"], {"answer": "Масло покрыто лаком с УФ-фильтром, но прямого солнца лучше избегать."})
+    call("POST", "/posts", toks["marina@demo.artista"], {"body": "Вернулась с пленэра в Кронштадте — скоро покажу новые этюды. Пока работаю над большим заливом в мастерской.", "images": [upload(toks["marina@demo.artista"], seascape(900, 700, rnd, [(200, 210, 220), (240, 220, 200)], [(90, 120, 140), (50, 60, 80)], (250, 230, 190)))]})
+    call("POST", "/posts", toks["timur@demo.artista"], {"body": "Новая работа из серии «Тишина» уже на аукционе — торги три дня.", "artwork_id": created[4]["id"]})
+
+    # аукцион и выставка-дроп
+    call("POST", f"/artworks/{created[4]['id']}/auction", toks["timur@demo.artista"], {"start_kop": 90000_00, "days": 3})
+    drafts = []
+    for title, paint in [("Ирисы", lambda: botanic(700, 900, rnd, (236, 230, 240), [(70, 100, 80), (90, 130, 90)], (120, 90, 180))),
+                         ("Сирень у дома", lambda: botanic(800, 800, rnd, (240, 236, 228), [(60, 100, 70), (100, 140, 90)], (170, 120, 200)))]:
+        d = call("POST", "/artworks", toks["olga@demo.artista"], {
+            "title": title, "description": "Гуашь на бумаге. Новая весенняя серия.", "category": "graphics", "style": "contemporary",
+            "technique": "gouache", "materials": "", "width_cm": 30, "height_cm": 40, "depth_cm": 0, "year": 2026,
+            "price_kop": 9500_00, "images": [upload(toks["olga@demo.artista"], paint())], "publish": False, "rooms": ["bedroom"]})
+        drafts.append(d["id"])
+    import datetime
+    starts = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=2)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    ex = call("POST", "/exhibitions", toks["olga@demo.artista"], {"title": "Весенний сад", "description": "Новая серия ботанической гуаши — две работы, которые появятся в продаже одновременно.", "starts_at": starts, "artwork_ids": drafts})
+    call("POST", f"/exhibitions/{ex['id']}/remind", buyer_tok)
+
+    # сохранённый поиск: новые работы в синих тонах
+    call("POST", "/me/saved-searches", buyer_tok, {"title": "Синие работы до 50 000 ₽", "filters": {"colors": ["blue"], "price_max": 50000_00}})
     print(f"\nГотово. Вход: buyer@demo.artista / {PASSWORD}, художник: marina@demo.artista / {PASSWORD}")
 
 

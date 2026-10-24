@@ -1,0 +1,14 @@
+{{define "content"}}
+{{with .Exhibition}}
+<section class="profile" aria-labelledby="ex-name">
+  <h1 id="ex-name">{{.Title}}</h1>
+  <p class="meta"><a href="/u/{{.Artist.ID}}">{{.Artist.Name}}</a>, {{if eq .Status "open"}}выставка открыта{{else}}откроется {{datetime .StartsAt}} по Москве{{end}}</p>
+  {{with .Description}}<p class="bio">{{.}}</p>{{end}}
+  {{if ne .Status "open"}}<p class="notice">Включите напоминание в приложении — пришлём уведомление в момент открытия, когда работы появятся в продаже.</p>{{end}}
+  <div><a class="btn only-touch" href="artista://exhibition/{{.ID}}">Открыть в приложении</a></div>
+</section>
+{{end}}
+<section class="section" aria-label="Работы выставки">
+  {{if .Works}}<div class="grid">{{range .Works}}{{template "card" .}}{{end}}</div>{{end}}
+</section>
+{{end}}
