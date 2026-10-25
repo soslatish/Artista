@@ -1,48 +1,38 @@
 {{define "content"}}
-<section class="lead" aria-labelledby="lead-title">
-  <div class="lead__inner">
-    <h1 id="lead-title">Оригинальные работы прямо из мастерских</h1>
-    <div style="display:grid; gap:1.25rem">
-      <p>Живопись, графика и скульптура от художников из разных городов России. {{if .SafeDeals}}Деньги уходят автору только после того, как работа у вас.{{else}}Покупайте напрямую у авторов — без наценки и посредников.{{end}}</p>
-      <div id="app">{{template "stores" .}}</div>
+<section class="hero" aria-labelledby="lead-title">
+  <div class="hero__inner">
+    <div>
+      <h1 id="lead-title"><span>Находи.</span><span>Примеряй.</span><span>Покупай.</span></h1>
+      <p class="hero__lead">Живопись, графика и скульптура от художников из разных городов России. Примерьте работу на свою стену в настоящем масштабе{{if .SafeDeals}}, а деньги уйдут автору только после того, как работа у вас.{{else}} и напишите художнику напрямую — без наценки и посредников.{{end}}</p>
+      <div id="app-top">{{template "stores" .}}</div>
+    </div>
+    <div class="stage" aria-hidden="{{if .Wall}}false{{else}}true{{end}}">
+      <div class="sun"></div>
+      <span class="matrix matrix--a"></span><span class="matrix matrix--b"></span>
+      {{template "tri" "tri--a"}}{{template "tri" "tri--b"}}
+      <span class="bubble bubble--a"></span><span class="bubble bubble--b"></span>
+      {{range $i, $w := .Wall}}
+        {{if eq $i 0}}<a class="frame" href="/a/{{$w.ID}}" style="--ratio: {{$w.Ratio}}">{{if $w.Image}}<img src="{{$w.Image}}" alt="{{$w.Title}}, {{$w.ArtistName}}">{{end}}<span class="frame__label"><span class="art-title">{{$w.Title}}</span>{{$w.ArtistName}}, {{rub $w.PriceKop}}</span></a>{{end}}
+        {{if eq $i 1}}<a class="orb orb--a" href="/a/{{$w.ID}}" aria-label="{{$w.Title}}, {{$w.ArtistName}}">{{if $w.Image}}<img src="{{$w.Image}}" alt="" loading="lazy">{{end}}</a>{{end}}
+        {{if eq $i 2}}<a class="orb orb--b" href="/a/{{$w.ID}}" aria-label="{{$w.Title}}, {{$w.ArtistName}}">{{if $w.Image}}<img src="{{$w.Image}}" alt="" loading="lazy">{{end}}</a>{{end}}
+      {{end}}
     </div>
   </div>
+  <div class="hero__horizon"><img src="/static/horizon.svg" alt=""></div>
 </section>
 
-<section class="wall" aria-label="Новые работы в настоящем масштабе">
-  {{if .Wall}}
-  <div class="wall__hang">
-    {{range $i, $w := .Wall}}
-    <a class="work" href="/a/{{$w.ID}}" style="--w: {{$w.W}}; --ratio: {{$w.Ratio}}; --i: {{$i}}">
-      <div class="work__frame">{{if $w.Image}}<img src="{{$w.Image}}" alt="{{$w.Title}}, {{$w.ArtistName}}" loading="lazy">{{end}}</div>
-      <span class="work__label"><b class="art-title">{{$w.Title}}</b>{{$w.ArtistName}}<br>{{$w.Facts}}<br>{{rub $w.PriceKop}}</span>
-    </a>
-    {{end}}
+<section class="section" id="works" aria-labelledby="works-title">
+  <div class="section__head">
+    <div><h2 id="works-title">Новые работы</h2><span class="dots"></span></div>
+    {{if .WebApp}}<a class="section__more" href="{{.WebApp}}/">Вся галерея</a>{{end}}
   </div>
-  <div class="ruler" aria-hidden="true"><span></span><span>50 см — работы на стене в настоящем масштабе</span></div>
-  {{else}}
-  <p class="wall__empty">Скоро здесь появятся первые работы.</p>
-  {{end}}
-</section>
-
-<section class="section" aria-labelledby="deal-title">
-  <h2 id="deal-title">Как проходит покупка</h2>
-  {{if .SafeDeals}}<ol class="steps">
-    <li><b>Вы оплачиваете</b><p>Деньги хранятся у Artista, художник их пока не получает.</p></li>
-    <li><b>Художник отправляет</b><p>У него 24 часа на подтверждение и 48 часов на отправку с трек-номером.</p></li>
-    <li><b>Вы получаете работу</b><p>Проверяете посылку и подтверждаете получение в приложении.</p></li>
-    <li><b>Автор получает оплату</b><p>А вы — сертификат подлинности с QR-кодом.</p></li>
-  </ol>{{else}}<ol class="steps">
-    <li><b>Выбираете работу</b><p>Примеряете на свою стену в настоящем масштабе, задаёте вопросы.</p></li>
-    <li><b>Пишете художнику</b><p>Прямо на странице работы — в приложении или в браузере.</p></li>
-    <li><b>Договариваетесь</b><p>О цене, оплате и доставке — напрямую с автором, без посредников.</p></li>
-    <li><b>Работа у вас</b><p>Художник отмечает её проданной, а вы можете следить за его новыми работами.</p></li>
-  </ol>{{end}}
+  {{if .Recent}}<div class="grid">{{range .Recent}}{{template "card" .}}{{end}}</div>
+  {{else}}<p>Работы появятся, как только художники их опубликуют.</p>{{end}}
 </section>
 
 {{if .Exhibitions}}
 <section class="section" aria-labelledby="ex-title">
-  <h2 id="ex-title">Выставки</h2>
+  <div class="section__head"><div><h2 id="ex-title">Выставки</h2><span class="dots"></span></div></div>
   <div class="grid">
     {{range .Exhibitions}}
     <a class="card" href="/e/{{.ID}}">
@@ -55,17 +45,26 @@
 </section>
 {{end}}
 
-<section class="section" id="works" aria-labelledby="works-title">
-  <h2 id="works-title">Новые работы</h2>
-  {{if .Recent}}<div class="grid">{{range .Recent}}{{template "card" .}}{{end}}</div>
-  {{else}}<p>Работы появятся, как только художники их опубликуют.</p>{{end}}
+<section class="section" id="how" aria-labelledby="deal-title">
+  <div class="section__head"><div><h2 id="deal-title">Как проходит покупка</h2><span class="dots"></span></div></div>
+  {{if .SafeDeals}}<ol class="steps">
+    <li><b>Вы оплачиваете</b><p>Деньги хранятся у Artista, художник их пока не получает.</p></li>
+    <li><b>Художник отправляет</b><p>У него 24 часа на подтверждение и 48 часов на отправку с трек-номером.</p></li>
+    <li><b>Вы получаете работу</b><p>Проверяете посылку и подтверждаете получение в приложении.</p></li>
+    <li><b>Автор получает оплату</b><p>А вы — сертификат подлинности с QR-кодом.</p></li>
+  </ol>{{else}}<ol class="steps">
+    <li><b>Выбираете работу</b><p>Примеряете на свою стену в настоящем масштабе, задаёте вопросы.</p></li>
+    <li><b>Пишете художнику</b><p>Прямо на странице работы — в приложении или в браузере.</p></li>
+    <li><b>Договариваетесь</b><p>О цене, оплате и доставке — напрямую с автором, без посредников.</p></li>
+    <li><b>Работа у вас</b><p>Художник отмечает её проданной, а вы следите за его новыми работами.</p></li>
+  </ol>{{end}}
 </section>
 
 <section class="section" id="artists" aria-labelledby="artists-title">
   <div class="artists">
     <div style="display:grid; gap:1.25rem">
-      <h2 id="artists-title">Продавайте свои работы</h2>
-      <p style="color:var(--graphite); max-width:var(--measure)">{{if .SafeDeals}}Публикация бесплатная. Мы берём комиссию только с продажи, а доставку и защиту оплаты берём на себя.{{else}}Публикация бесплатная, комиссии с продаж нет: покупатели пишут вам напрямую, а оплату и доставку вы обсуждаете сами.{{end}} Принимайте заказы на портреты и картины под интерьер, проводите онлайн-выставки и аукционы.</p>
+      <div><h2 id="artists-title">Продавайте свои работы</h2><span class="dots"></span></div>
+      <p>{{if .SafeDeals}}Публикация бесплатная. Мы берём комиссию только с продажи, а доставку и защиту оплаты берём на себя.{{else}}Публикация бесплатная, комиссии с продаж нет: покупатели пишут вам напрямую, а оплату и доставку вы обсуждаете сами.{{end}} Принимайте заказы на портреты и картины под интерьер, проводите онлайн-выставки и аукционы.</p>
       <div>{{template "stores" .}}</div>
     </div>
     <dl class="terms">
@@ -76,5 +75,13 @@
       <div><dt>{{rub .PremiumKop}}</dt><dd>в месяц Премиум: ваши работы выше в ленте, отметка мастерской и расширенная статистика</dd></div>{{end}}
     </dl>
   </div>
+</section>
+
+<section class="app" id="app" aria-labelledby="app-title">
+  <h2 id="app-title">Галерея всегда под рукой</h2>
+  <span class="dots"></span>
+  <p>Откройте Artista в браузере — в том числе прямо из Telegram — или установите приложение: подписки на художников, примерка на стену, выставки и чат с автором.</p>
+  {{template "stores" .}}
+  <div class="hero__horizon"><img src="/static/horizon.svg" alt="" loading="lazy"></div>
 </section>
 {{end}}

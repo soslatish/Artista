@@ -26,13 +26,13 @@
     </div>
     {{if gt (len .History) 1}}
     <div>
-      <h2 style="font-size:1.1rem; margin-bottom:.5rem">История владения</h2>
+      <h2 style="font: 500 1.05rem/1.3 var(--display); margin-bottom:.5rem">История владения</h2>
       <table>
         {{range .History}}<tr><th scope="row">{{.Owner}}</th><td>с {{date .IssuedAt}}{{if eq .Status "active"}} по настоящее время{{end}}</td></tr>{{end}}
       </table>
     </div>
     {{end}}
-    <p style="color:var(--graphite); font-size:.9rem">Сертификат выпущен Artista после завершения сделки: покупатель получил работу, художник — оплату. Подлинность можно проверить по этой странице или QR-коду.</p>
+    <p class="cert__note">Сертификат выпущен Artista после завершения сделки: покупатель получил работу, художник — оплату. Подлинность можно проверить по этой странице или QR-коду.</p>
     <div class="no-print actions">{{template "web" $}}<button class="btn btn--line" type="button" onclick="window.print()">Распечатать</button></div>
   </article>
 </div>
