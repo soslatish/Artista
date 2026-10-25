@@ -28,7 +28,7 @@ func TestSitePages(t *testing.T) {
 	a := publishArtwork(t, artist, "Закат над Невой", 9_000_00)
 
 	code, body, h := getPage(t, "/")
-	if code != 200 || !strings.Contains(h.Get("Content-Type"), "text/html") || !strings.Contains(body, "Покупай у автора") {
+	if code != 200 || !strings.Contains(h.Get("Content-Type"), "text/html") || !strings.Contains(body, "Примеряй.") {
 		t.Fatalf("home: %d %s", code, h.Get("Content-Type"))
 	}
 	code, body, _ = getPage(t, "/a/"+a.ID)
