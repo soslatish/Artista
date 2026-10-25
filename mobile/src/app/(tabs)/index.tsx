@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText } from '@/api/client';
@@ -12,6 +12,7 @@ import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { ArtworkStrip, Gallery } from '@/ui/artwork';
 import { ExhibitionCard, PostCard } from '@/ui/cards';
+import { APP_MAX_WIDTH, centerInset } from '@/ui/layout';
 import { Button, Chip, EmptyState, ErrorState, IconButton, Loading, Notice, SectionHeader } from '@/ui/primitives';
 import { makeStyles, space, useColors } from '@/ui/theme';
 
@@ -34,6 +35,8 @@ export default function GalleryScreen() {
   const feed: Feed = !user && selectedFeed === 'for_you' ? 'new' : selectedFeed; // «Для вас» только с аккаунтом
   const notifications = useNotifications(!!user);
   const unread = notifications.data?.pages[0]?.meta.unread ?? 0;
+  // шапка во всю ширину, логотип и кнопки — по краям ленты
+  const bandSide = centerInset(useWindowDimensions().width, APP_MAX_WIDTH, space.lg);
 
   const chips = (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.feeds}>
@@ -47,7 +50,7 @@ export default function GalleryScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.band, { paddingTop: insets.top + space.sm }]}>
+      <View style={[styles.band, { paddingTop: insets.top + space.sm, paddingHorizontal: bandSide }]}>
         <Image source={require('@/assets/images/wordmark.png')} style={styles.wordmark} contentFit="contain" accessibilityLabel="Artista" />
         <View style={styles.actions}>
           {user?.role === 'artist' ? <IconButton icon="add-circle-outline" label={t('Добавить работу')} color={colors.onDark} onPress={() => router.push('/artwork/new')} /> : null}

@@ -9,6 +9,7 @@ import type { Conversation } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { formatMessageTime } from '@/lib/format';
+import { webPage } from '@/ui/layout';
 import { Avatar, Button, EmptyState, ErrorState, Loading, T } from '@/ui/primitives';
 import { makeStyles, radius, space, useColors } from '@/ui/theme';
 
@@ -22,7 +23,7 @@ export default function MessagesScreen() {
 
   if (!user) {
     return (
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View style={[styles.root, webPage, { paddingTop: insets.top }]}>
         <EmptyState
           icon="chatbubbles-outline"
           title={t('Переписка с художниками')}
@@ -34,7 +35,7 @@ export default function MessagesScreen() {
   }
   const items = flatten(q.data);
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, webPage, { paddingTop: insets.top }]}>
       <T variant="display" style={styles.title}>
         {t('Сообщения')}
       </T>

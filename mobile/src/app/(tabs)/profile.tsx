@@ -11,6 +11,7 @@ import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { usePlatformTerms } from '@/lib/terms';
 import { formatDate } from '@/lib/format';
+import { webPage } from '@/ui/layout';
 import { Avatar, Button, type IconName, Notice, PremiumMark, T } from '@/ui/primitives';
 import { makeStyles, radius, space, useColors } from '@/ui/theme';
 
@@ -26,7 +27,7 @@ export default function ProfileScreen() {
 
   if (!user) {
     return (
-      <ScrollView style={styles.root} contentContainerStyle={[styles.guest, { paddingTop: insets.top + space.xxl }]}>
+      <ScrollView style={styles.root} contentContainerStyle={[styles.guest, webPage, { paddingTop: insets.top + space.xxl }]}>
         <T variant="display">{t('Профиль')}</T>
         <T variant="body">{t('Войдите, чтобы покупать работы, переписываться с художниками и продавать свои.')}</T>
         <View style={styles.guestActions}>
@@ -56,7 +57,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingTop: insets.top + space.lg }]}>
+    <ScrollView style={styles.root} contentContainerStyle={[styles.content, webPage, { paddingTop: insets.top + space.lg }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('Открыть мой публичный профиль')}

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { memo, type ReactElement, useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { useCatalogMeta, useToggleFavorite } from '@/api/hooks';
 import type { Artwork, ArtworkStatus, CatalogMeta } from '@/api/types';
@@ -14,7 +14,7 @@ import { formatPrice, formatSize } from '@/lib/format';
 import { requireAuth } from '@/lib/guard';
 
 import { PremiumMark } from './primitives';
-import { useGalleryColumns } from './layout';
+import { APP_MAX_WIDTH, centerInset, galleryColumns } from './layout';
 import { fonts, hitSlop, makeStyles, radius, space, useColors } from './theme';
 
 const statusLabels: Record<ArtworkStatus, string> = {
@@ -166,7 +166,12 @@ export function Gallery({ items, loading, refreshing, onRefresh, onEndReached, l
   const { data: meta } = useCatalogMeta();
   const colors = useColors();
   const styles = useStyles();
-  const columns = useGalleryColumns();
+  // колонки и поля считаются от ширины самой ленты: она бывает и во всё окно, и внутри колонки экрана
+  const { width: windowWidth } = useWindowDimensions();
+  const [boxWidth, setBoxWidth] = useState(0);
+  const width = boxWidth || windowWidth;
+  const columns = galleryColumns(Math.min(width, APP_MAX_WIDTH));
+  const side = centerInset(width, APP_MAX_WIDTH, space.sm);
   const renderItem = useCallback(
     ({ item }: { item: Artwork }) => <ArtworkCard artwork={item} meta={meta} showStatus={showStatus} src={src} />,
     [meta, showStatus, src],
@@ -179,7 +184,8 @@ export function Gallery({ items, loading, refreshing, onRefresh, onEndReached, l
       keyExtractor={(a) => a.id}
       renderItem={renderItem}
       style={styles.list}
-      contentContainerStyle={styles.gallery}
+      onLayout={(e) => setBoxWidth(e.nativeEvent.layout.width)}
+      contentContainerStyle={{ ...styles.gallery, paddingHorizontal: side }}
       ListHeaderComponent={header}
       ListEmptyComponent={loading ? <ActivityIndicator style={styles.spinner} color={colors.bordeaux} /> : empty}
       ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.spinner} color={colors.bordeaux} /> : null}

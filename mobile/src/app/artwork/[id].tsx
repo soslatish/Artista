@@ -17,7 +17,7 @@ import { chooseAction, confirmAction, notify } from '@/lib/confirm';
 import { formatDate, formatPrice, formatSize, formatTimeLeft } from '@/lib/format';
 import { requireAuth, validId } from '@/lib/guard';
 import { ArtworkStrip, labelOf, previewAspect, statusLabel } from '@/ui/artwork';
-import { contentWidth, isWeb, useAppWidth, useContentWidth } from '@/ui/layout';
+import { contentWidth, isWeb, useContentWidth } from '@/ui/layout';
 import { Avatar, Button, Divider, ErrorState, IconButton, Loading, Notice, PremiumMark, SectionHeader, T } from '@/ui/primitives';
 import { fonts, makeStyles, radius, space, useColors } from '@/ui/theme';
 import { ImageViewer } from '@/ui/zoom';
@@ -43,9 +43,9 @@ function ArtworkView({ a }: { a: Artwork }) {
   const colors = useColors();
   // в браузере карточка работы — колонка шириной contentWidth.page по центру
   const width = useContentWidth(contentWidth.page);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // кнопки внизу — по ширине той же колонки
-  const barSide = (useAppWidth() - width) / 2 + space.lg;
-  const { height: windowHeight } = useWindowDimensions();
+  const barSide = (windowWidth - width) / 2 + space.lg;
   const insets = useSafeAreaInsets();
   const { user } = useSession();
   const { data: meta } = useCatalogMeta();
