@@ -7,7 +7,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText, fieldErrors, post } from '@/api/client';
-import { useCatalogMeta, useSaveArtwork, useUserSeries } from '@/api/hooks';
+import { useCatalogMeta, useSafeDeals, useSaveArtwork, useUserSeries } from '@/api/hooks';
 import type { AssistantSuggestion, Option } from '@/api/types';
 import { uploadImage } from '@/api/upload';
 import { useSession } from '@/auth/session';
@@ -31,6 +31,7 @@ interface Props {
 export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
   const t = useT();
   const terms = usePlatformTerms();
+  const safeDeals = useSafeDeals();
   const styles = useStyles();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -212,7 +213,7 @@ export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
           onChange={(allowOffers) => setForm((f) => ({ ...f, allowOffers }))}
         />
 
-        <Notice text={t('Комиссия Artista — {pct} с продажи. С премиумом — 0% на продажи до {limit} в месяц.', { pct: terms.pct, limit: terms.limit })} />
+        <Notice text={safeDeals ? t('Комиссия Artista — {pct} с продажи. С премиумом — 0% на продажи до {limit} в месяц.', { pct: terms.pct, limit: terms.limit }) : t('Комиссии нет: покупатели напишут вам в чат, оплату и доставку вы обсуждаете напрямую. С Премиумом работы выше в ленте.')} />
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={isPublished ? t('Сохранить') : t('Опубликовать')} loading={save.isPending} disabled={uploading > 0} onPress={() => submit(true)} />
         {!isPublished ? <Button title={t('Сохранить черновик')} variant="secondary" disabled={save.isPending || uploading > 0} onPress={() => submit(false)} /> : null}

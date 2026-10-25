@@ -89,6 +89,7 @@ type sitePage struct {
 	// условия из настроек платформы (меняются в админке)
 	CommissionPct           string
 	PremiumKop, PremiumFree int64
+	SafeDeals               bool // оплата через Artista с удержанием; иначе — прямая сделка с художником
 	Year                    int
 	NoIndex                 bool
 	Stores                  siteStores
@@ -168,6 +169,7 @@ func (s *Server) basePage(r *http.Request, title, description string) sitePage {
 		Stores: siteStores{GooglePlay: s.Config.StoreGooglePlay, RuStore: s.Config.StoreRuStore, AppStore: s.Config.StoreAppStore},
 		WebApp: s.webAppURL(), CommissionPct: percent(domain.CurrentSettings().CommissionBP),
 		PremiumKop: domain.CurrentSettings().PremiumPriceKop, PremiumFree: domain.CurrentSettings().PremiumFreeLimitKop,
+		SafeDeals: domain.CurrentSettings().SafeDeals,
 	}
 }
 

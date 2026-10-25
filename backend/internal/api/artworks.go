@@ -654,3 +654,48 @@ func deliveryErrorText(err error) string {
 		return "Неизвестный способ доставки"
 	}
 }
+
+// markSold — художник отмечает работу проданной (прямая сделка вне площадки): работа уходит из продажи,
+// открытые предложения и брони закрываются.
+func (s *Server) markSold(w http.ResponseWriter, r *http.Request, u httpx.User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	err = s.withTx(r.Context(), func(tx pgx.Tx) error {
+		_, status, err := ownArtworkForUpdate(r.Context(), tx, id, u.ID)
+		if err != nil {
+			return err
+		}
+		if status != "published" && status != "reserved" {
+			return httpx.Conflict("artwork_locked", "Отметить проданной можно работу в продаже или в резерве")
+		}
+		var activeOrder bool
+		if err := tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM orders WHERE artwork_id = $1
+				AND status IN ('awaiting_payment','paid','confirmed','shipped'))`, id).Scan(&activeOrder); err != nil {
+			return err
+		}
+		if activeOrder {
+			return httpx.Conflict("artwork_locked", "По работе идёт заказ через Artista — она станет проданной после его завершения")
+		}
+		for _, q := range []string{
+			`UPDATE artworks SET status = 'sold', updated_at = now() WHERE id = $1`,
+			`UPDATE offers SET status = 'expired', updated_at = now() WHERE artwork_id = $1 AND status IN ('pending','countered','accepted')`,
+			`UPDATE price_locks SET released_at = now() WHERE artwork_id = $1 AND used_at IS NULL AND released_at IS NULL`,
+		} {
+			if _, err := tx.Exec(r.Context(), q, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	a, err := loadArtwork(r.Context(), s.DB, id, u.ID)
+	if err != nil {
+		return err
+	}
+	httpx.OK(w, a)
+	return nil
+}

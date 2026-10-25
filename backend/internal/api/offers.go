@@ -249,7 +249,11 @@ func (s *Server) offerAction(w http.ResponseWriter, r *http.Request, u httpx.Use
 			}
 			notifyUser, typ = buyerID, "offer_accepted"
 			heading = tr("Предложение принято", "Offer accepted")
-			body = tr("«%s» за %s — оформите заказ в течение 24 часов", "“%s” for %s — place the order within 24 hours", title, rub(amount))
+			if domain.CurrentSettings().DirectDeals() {
+				body = tr("«%s» за %s — напишите художнику, чтобы договориться об оплате и доставке", "“%s” for %s — message the artist to agree on payment and delivery", title, rub(amount))
+			} else {
+				body = tr("«%s» за %s — оформите заказ в течение 24 часов", "“%s” for %s — place the order within 24 hours", title, rub(amount))
+			}
 		case isArtist && action == "decline" && status == "pending":
 			if err := setOfferStatus(r.Context(), tx, id, "declined"); err != nil {
 				return err

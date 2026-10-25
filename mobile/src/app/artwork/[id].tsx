@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -6,7 +7,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText, post } from '@/api/client';
-import { useArchiveArtwork, useArtwork, useCatalogMeta, useFeature, useSimilar, useToggleFavorite } from '@/api/hooks';
+import { keys, useArchiveArtwork, useArtwork, useCatalogMeta, useFeature, usePromotionSales, useSafeDeals, useSimilar, useToggleFavorite } from '@/api/hooks';
 import type { Artwork, Conversation } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { QuestionsBlock } from '@/features/questions';
@@ -51,6 +52,7 @@ function ArtworkView({ a }: { a: Artwork }) {
   const [chatBusy, setChatBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const safeDeals = useSafeDeals();
   const mine = user?.id === a.artist.id;
   const onVacation = !!a.artist.on_vacation;
   const hasLock = !!a.my_price_kop;
@@ -72,12 +74,12 @@ function ArtworkView({ a }: { a: Artwork }) {
 
   const toggleFav = () => requireAuth(!!user) && fav.mutate({ id: a.id, on: !a.is_favorite });
 
-  const writeArtist = async () => {
+  const writeArtist = async (draft = '') => {
     if (!requireAuth(!!user)) return;
     setChatBusy(true);
     try {
       const c = await post<Conversation>('/conversations', { user_id: a.artist.id, artwork_id: a.id });
-      router.push({ pathname: '/chat/[id]', params: { id: c.id, name: a.artist.name } });
+      router.push({ pathname: '/chat/[id]', params: { id: c.id, name: a.artist.name, draft } });
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -202,7 +204,7 @@ function ArtworkView({ a }: { a: Artwork }) {
           ) : hasLock ? (
             <View>
               <T variant="priceLarge">{formatPrice(a.my_price_kop!)}</T>
-              <T variant="small">{t('Ваша согласованная цена — оформите заказ, пока бронь действует.')}</T>
+              <T variant="small">{safeDeals ? t('Ваша согласованная цена — оформите заказ, пока бронь действует.') : t('Художник согласился на эту цену — напишите ему, чтобы договориться об оплате и доставке.')}</T>
             </View>
           ) : (
             <T variant="priceLarge">{formatPrice(a.price_kop)}</T>
@@ -287,8 +289,22 @@ function ArtworkView({ a }: { a: Artwork }) {
             </Pressable>
           ) : null}
           <View style={styles.barRow}>
-            <Button title={t('Написать')} variant="secondary" style={styles.flex} loading={chatBusy} onPress={writeArtist} />
-            {a.status === 'auction' && a.auction ? (
+            {!safeDeals && a.status !== 'auction' ? (
+              <Button
+                title={canBuy ? t('Написать художнику') : onVacation && a.status === 'published' ? t('Художник на паузе') : t('Написать')}
+                variant={canBuy ? 'primary' : 'secondary'}
+                style={styles.flex}
+                loading={chatBusy}
+                onPress={() =>
+                  canBuy
+                    ? void writeArtist(t('Здравствуйте! Хочу купить «{title}» за {price}. Как удобнее оплатить и получить работу?', { title: a.title, price: formatPrice(a.my_price_kop ?? a.price_kop) }))
+                    : void writeArtist()
+                }
+              />
+            ) : (
+              <Button title={t('Написать')} variant="secondary" style={styles.flex} loading={chatBusy} onPress={() => void writeArtist()} />
+            )}
+            {!safeDeals && a.status !== 'auction' ? null : a.status === 'auction' && a.auction ? (
               <Button title={t('Сделать ставку')} style={styles.flex} onPress={() => router.push({ pathname: '/auction/[id]', params: { id: a.auction!.id } })} />
             ) : (
               <Button
@@ -312,11 +328,30 @@ function OwnerTools({ a, onArchive, archiving }: { a: Artwork; onArchive: () => 
   const styles = useStyles();
   const editable = a.status === 'draft' || a.status === 'published' || a.status === 'archived' || a.status === 'scheduled';
   const auctionsOn = useFeature('auctions');
+  const promotionSales = usePromotionSales();
+  const safeDeals = useSafeDeals();
+  const qc = useQueryClient();
+  const [selling, setSelling] = useState(false);
+  const markSold = () =>
+    confirmAction(t('Отметить работу проданной?'), t('Она уйдёт из продажи, открытые предложения цены закроются.'), async () => {
+      setSelling(true);
+      try {
+        const next = await post<Artwork>(`/artworks/${a.id}/sold`);
+        qc.setQueryData(keys.artwork(a.id), next);
+        qc.invalidateQueries({ queryKey: ['artworks'] });
+        qc.invalidateQueries({ queryKey: ['my-artworks'] });
+      } catch (e) {
+        notify(t('Не удалось сохранить'), errorText(e));
+      } finally {
+        setSelling(false);
+      }
+    });
   return (
     <View style={styles.owner}>
       <T variant="heading">{t('Управление работой')}</T>
       {editable ? <Button title={t('Редактировать')} icon="create-outline" onPress={() => router.push({ pathname: '/artwork/edit/[id]', params: { id: a.id } })} /> : null}
-      {a.status === 'published' || a.status === 'auction' ? (
+      {!safeDeals && (a.status === 'published' || a.status === 'reserved') ? <Button title={t('Отметить проданной')} icon="checkmark-done-outline" loading={selling} onPress={markSold} /> : null}
+      {promotionSales && (a.status === 'published' || a.status === 'auction') ? (
         <Button title={a.is_promoted ? t('Продлить продвижение') : t('Продвинуть в ленте')} variant="secondary" icon="trending-up-outline" onPress={() => router.push({ pathname: '/promote/[id]', params: { id: a.id } })} />
       ) : null}
       {auctionsOn && (a.status === 'published' || a.status === 'draft') ? (

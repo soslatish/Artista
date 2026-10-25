@@ -19,7 +19,15 @@ type Settings struct {
 	OffersEnabled       bool              `json:"offers_enabled"`
 	AuctionsEnabled     bool              `json:"auctions_enabled"`
 	CommissionsEnabled  bool              `json:"commissions_enabled"`
+	// SafeDeals — оплата работ через Artista с удержанием денег до получения и комиссией.
+	// Выключено: покупатель договаривается с художником напрямую в чате, площадка денег за работы не принимает.
+	SafeDeals bool `json:"safe_deals"`
+	// PromotionSales — продажа продвижения отдельных работ; без неё продвижение в ленте даёт только Премиум.
+	PromotionSales bool `json:"promotion_sales"`
 }
+
+// DirectDeals — покупка напрямую у художника (без оплаты через площадку).
+func (s Settings) DirectDeals() bool { return !s.SafeDeals }
 
 // DefaultSettings — значения из бизнес-плана.
 func DefaultSettings() Settings {

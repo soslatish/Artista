@@ -32,6 +32,8 @@ interface Form {
   offers: boolean;
   auctions: boolean;
   commissions: boolean;
+  safeDeals: boolean;
+  promotionSales: boolean;
 }
 
 function toForm(s: PlatformSettings): Form {
@@ -46,6 +48,8 @@ function toForm(s: PlatformSettings): Form {
     offers: s.offers_enabled,
     auctions: s.auctions_enabled,
     commissions: s.commissions_enabled,
+    safeDeals: s.safe_deals,
+    promotionSales: s.promotion_sales,
   };
 }
 
@@ -61,6 +65,8 @@ function fromForm(f: Form): PlatformSettings {
     offers_enabled: f.offers,
     auctions_enabled: f.auctions,
     commissions_enabled: f.commissions,
+    safe_deals: f.safeDeals,
+    promotion_sales: f.promotionSales,
   };
 }
 
@@ -132,6 +138,20 @@ function SettingsForm({ data }: { data: SettingsResponse }) {
         {form.tariffs.length < 6 ? <Button title="Добавить тариф" variant="ghost" onPress={() => set('tariffs', [...form.tariffs, { days: '', price: '' }])} /> : null}
       </Section>
 
+      <Section title="Модель заработка">
+        <ToggleRow
+          label="Безопасная сделка (оплата через Artista)"
+          hint="Выключено: покупатель пишет художнику и платит ему напрямую, комиссии нет. Включайте только после договора с платёжным сервисом и юристом."
+          value={form.safeDeals}
+          onChange={(v) => set('safeDeals', v)}
+        />
+        <ToggleRow
+          label="Платное продвижение отдельных работ"
+          hint="Выключено: продвижение в ленте даёт только Премиум."
+          value={form.promotionSales}
+          onChange={(v) => set('promotionSales', v)}
+        />
+      </Section>
       <Section title="Функции">
         <ToggleRow label="Регистрация новых пользователей" hint="Выключите, чтобы временно закрыть регистрацию" value={form.registration} onChange={(v) => set('registration', v)} />
         <ToggleRow label="Предложения цены" value={form.offers} onChange={(v) => set('offers', v)} />

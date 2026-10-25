@@ -57,7 +57,7 @@
   {{if .Stores.AppStore}}<a class="store" href="{{.Stores.AppStore}}" rel="noopener">App Store</a>{{end}}
 </div>{{end}}
 
-{{define "web"}}{{if .WebApp}}<a class="btn" href="{{.WebApp}}{{.WebPath}}">{{if .Artwork}}Купить в браузере{{else}}Открыть в браузере{{end}}</a>{{end}}{{end}}
+{{define "web"}}{{if .WebApp}}<a class="btn" href="{{.WebApp}}{{.WebPath}}">{{if .Artwork}}{{if .SafeDeals}}Купить в браузере{{else}}Написать художнику{{end}}{{else}}Открыть в браузере{{end}}</a>{{end}}{{end}}
 
 {{define "card"}}<a class="card" href="/a/{{.ID}}">
   {{if .Image}}<img src="{{.Image}}" alt="" loading="lazy"{{if .W}} style="aspect-ratio: {{.Ratio}}"{{end}}>{{end}}

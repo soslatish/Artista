@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
-import { keys, useOffer } from '@/api/hooks';
+import { keys, useOffer, useSafeDeals } from '@/api/hooks';
 import type { Offer } from '@/api/types';
+import { useContactArtist } from '@/features/contact-artist';
 import { offerStatusLabel, offerTone } from '@/features/offer-status';
 import { useT } from '@/i18n';
 import { confirmAction } from '@/lib/confirm';
@@ -30,6 +31,8 @@ function OfferScreen({ id }: { id: string }) {
 }
 
 function OfferView({ o }: { o: Offer }) {
+  const safeDeals = useSafeDeals();
+  const { contact, busy: contacting } = useContactArtist();
   const t = useT();
   const styles = useStyles();
   const colors = useColors();
@@ -99,10 +102,27 @@ function OfferView({ o }: { o: Offer }) {
           <Button title={t('Отказаться')} variant="danger" disabled={busy} onPress={() => act('decline')} />
         </View>
       ) : null}
-      {!isArtist && o.status === 'accepted' ? (
+      {!isArtist && o.status === 'accepted' && safeDeals ? (
         <View style={styles.actions}>
           <Notice tone="success" text={t('Художник согласен. Оформите заказ — цена закреплена за вами на 24 часа.')} />
           <Button title={t('Оформить заказ за {p}', { p: formatPrice(o.agreed_kop ?? o.amount_kop) })} onPress={() => router.push({ pathname: '/checkout/[artworkId]', params: { artworkId: o.artwork.id } })} />
+        </View>
+      ) : null}
+      {!isArtist && o.status === 'accepted' && !safeDeals ? (
+        <View style={styles.actions}>
+          <Notice tone="success" text={t('Художник согласен на {p}. Напишите ему, чтобы договориться об оплате и доставке.', { p: formatPrice(o.agreed_kop ?? o.amount_kop) })} />
+          <Button
+            title={t('Написать художнику')}
+            loading={contacting}
+            onPress={() =>
+              void contact({
+                artistId: o.artist.id,
+                artistName: o.artist.name,
+                artworkId: o.artwork.id,
+                draft: t('Здравствуйте! Вы приняли моё предложение {p} за «{title}». Как удобнее оплатить и получить работу?', { p: formatPrice(o.agreed_kop ?? o.amount_kop), title: o.artwork.title }),
+              })
+            }
+          />
         </View>
       ) : null}
       {!isArtist && open ? <Button title={t('Отозвать предложение')} variant="ghost" disabled={busy} onPress={() => act('withdraw')} /> : null}

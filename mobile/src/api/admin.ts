@@ -26,6 +26,8 @@ export interface PlatformSettings {
   offers_enabled: boolean;
   auctions_enabled: boolean;
   commissions_enabled: boolean;
+  safe_deals: boolean;
+  promotion_sales: boolean;
 }
 
 export interface SettingsResponse {

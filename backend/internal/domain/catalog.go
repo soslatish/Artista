@@ -89,6 +89,7 @@ func CatalogMeta() Meta {
 		Features: map[string]bool{
 			"registration": cfg.RegistrationOpen, "offers": cfg.OffersEnabled,
 			"auctions": cfg.AuctionsEnabled, "commissions": cfg.CommissionsEnabled,
+			"safe_deals": cfg.SafeDeals, "promotion_sales": cfg.PromotionSales,
 		},
 		Colors:          append([]ColorOption(nil), Colors...),
 		Rooms:           append([]Option(nil), Rooms...),

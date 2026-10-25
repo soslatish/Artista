@@ -343,12 +343,20 @@ func (s *Server) commissionAction(w http.ResponseWriter, r *http.Request, u http
 			if in.ExpectedKop != 0 && c.quoteKop != nil && in.ExpectedKop != *c.quoteKop {
 				return httpx.Conflict("quote_changed", "Художник изменил цену — проверьте новое предложение")
 			}
+			notifyUser, typ = c.artistID, "commission_accepted"
+			heading = tr("Предложение принято", "Quote accepted")
+			if domain.CurrentSettings().DirectDeals() {
+				// прямые сделки: договорённость фиксируем, оплату и доставку стороны обсуждают в чате
+				if _, err := tx.Exec(r.Context(), `UPDATE commissions SET status = 'accepted', updated_at = now() WHERE id = $1`, id); err != nil {
+					return err
+				}
+				body = tr("Покупатель согласился на %s. Обсудите оплату и сроки в чате.", "The buyer accepted %s. Agree on payment and timing in the chat.", rub(*c.quoteKop))
+				break
+			}
 			orderID, err = s.acceptCommissionTx(r.Context(), tx, id, c, domain.DeliveryMethod(in.DeliveryMethod), in.Address)
 			if err != nil {
 				return err
 			}
-			notifyUser, typ = c.artistID, "commission_accepted"
-			heading = tr("Предложение принято", "Quote accepted")
 			body = tr("Покупатель согласился на %s. Работа начнётся после оплаты.", "The buyer accepted %s. Work starts after payment.", rub(*c.quoteKop))
 		default:
 			return httpx.Conflict("invalid_transition", "Это действие недоступно")

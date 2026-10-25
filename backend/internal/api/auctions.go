@@ -378,6 +378,13 @@ func (s *Server) closeAuction(ctx context.Context, id string) error {
 			tr("Ставок на «%s» не было — работа снова в продаже по обычной цене", "No bids on “%s” — it is back on sale at the regular price", title), data)
 		return nil
 	}
+	if domain.CurrentSettings().DirectDeals() {
+		s.notify(ctx, *leader, "auction_won", tr("Вы выиграли аукцион", "You won the auction"),
+			tr("«%s» за %s — напишите художнику, чтобы договориться об оплате и доставке", "“%s” for %s — message the artist to agree on payment and delivery", title, rub(*current)), data)
+		s.notify(ctx, artistID, "auction_ended", tr("Аукцион завершён", "Auction ended"),
+			tr("«%s» — итоговая ставка %s. Свяжитесь с победителем в чате.", "“%s” — winning bid %s. Contact the winner in the chat.", title, rub(*current)), data)
+		return nil
+	}
 	s.notify(ctx, *leader, "auction_won", tr("Вы выиграли аукцион", "You won the auction"),
 		tr("«%s» за %s — оформите заказ в течение 48 часов", "“%s” for %s — place the order within 48 hours", title, rub(*current)), data)
 	s.notify(ctx, artistID, "auction_ended", tr("Аукцион завершён", "Auction ended"),

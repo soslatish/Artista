@@ -46,7 +46,10 @@ const publicStatuses = "a.status IN ('published','reserved','sold','scheduled','
 // Сортировки — только из белого списка. Продвигаемые работы идут первыми в лентах,
 // но не в сортировках по цене.
 var sorts = map[string]string{
-	"new":        "is_promoted DESC, a.published_at DESC NULLS LAST, a.id DESC",
+	// Премиум продвигает работы художника в ленте: свежие (14 дней) — выше в «Новом»,
+	// все — выше в «Популярном» и «Для вас»; оплаченное продвижение работы — ещё выше
+	"new": `is_promoted DESC, (coalesce(u.premium_until > now(), false) AND a.published_at > now() - interval '14 days') DESC,
+		a.published_at DESC NULLS LAST, a.id DESC`,
 	"price_asc":  "a.price_kop ASC, a.id DESC",
 	"price_desc": "a.price_kop DESC, a.id DESC",
 	"popular": `is_promoted DESC, (coalesce(u.premium_until > now(), false)) DESC,

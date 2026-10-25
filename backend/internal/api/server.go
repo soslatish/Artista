@@ -238,6 +238,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH "+v+"/artworks/{id}", s.authed(s.updateArtwork))
 	mux.HandleFunc("DELETE "+v+"/artworks/{id}", s.authed(s.archiveArtwork))
 	mux.HandleFunc("POST "+v+"/artworks/{id}/publish", s.authed(s.publishArtwork))
+	mux.HandleFunc("POST "+v+"/artworks/{id}/sold", s.authed(s.markSold))
 	mux.HandleFunc("POST "+v+"/artworks/{id}/favorite", s.authed(s.addFavorite))
 	mux.HandleFunc("DELETE "+v+"/artworks/{id}/favorite", s.authed(s.removeFavorite))
 	mux.HandleFunc("GET "+v+"/artworks/{id}/similar", s.h(s.similarArtworks))

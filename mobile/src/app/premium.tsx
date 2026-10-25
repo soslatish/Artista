@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { errorText, get, post } from '@/api/client';
+import { useSafeDeals } from '@/api/hooks';
 import type { Me, Payment } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { TestPaymentSheet } from '@/features/test-payment';
@@ -14,9 +15,9 @@ import { usePlatformTerms } from '@/lib/terms';
 import { Button, type IconName, Notice, T } from '@/ui/primitives';
 import { makeStyles, space, useColors } from '@/ui/theme';
 
+const commissionPerk = { icon: 'cash-outline' as IconName, title: '0% комиссии', text: 'На продажи до {limit} в календарный месяц. Сверх лимита — обычные {pct}.' };
 const perks: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'cash-outline', title: '0% комиссии', text: 'На продажи до {limit} в календарный месяц. Сверх лимита — обычные {pct}.' },
-  { icon: 'trending-up-outline', title: 'Выше в ленте', text: 'Ваши работы показываются раньше в разделах «Популярное» и «Для вас».' },
+  { icon: 'trending-up-outline', title: 'Выше в ленте', text: 'Новые работы — первыми в «Новом» две недели, все работы — выше в «Популярном» и «Для вас».' },
   { icon: 'stats-chart-outline', title: 'Расширенная статистика', text: 'Просмотры по дням, откуда приходят покупатели, воронка от просмотра до продажи.' },
   { icon: 'brush-outline', title: 'Отметка мастерской', text: 'Золотой мазок рядом с именем на карточках и в профиле.' },
 ];
@@ -24,6 +25,7 @@ const perks: { icon: IconName; title: string; text: string }[] = [
 export default function PremiumScreen() {
   const t = useT();
   const terms = usePlatformTerms();
+  const safeDeals = useSafeDeals();
   const styles = useStyles();
   const colors = useColors();
   const { user, setUser } = useSession();
@@ -63,7 +65,7 @@ export default function PremiumScreen() {
       <T variant="priceLarge" color={colors.bordeaux}>
         {t('{price} в месяц', terms)}
       </T>
-      {perks.map((p) => (
+      {(safeDeals ? [commissionPerk, ...perks] : perks).map((p) => (
         <View key={p.title} style={styles.perk}>
           <Ionicons name={p.icon} size={26} color={colors.gold} />
           <View style={styles.flex}>

@@ -25,6 +25,7 @@ import (
 	"github.com/soslatish/artista/backend/internal/auth"
 	"github.com/soslatish/artista/backend/internal/config"
 	"github.com/soslatish/artista/backend/internal/db"
+	"github.com/soslatish/artista/backend/internal/domain"
 	"github.com/soslatish/artista/backend/internal/providers"
 )
 
@@ -92,6 +93,11 @@ func run(m *testing.M) int {
 		Payments: providers.StubPayments{Log: log}, Pusher: providers.LogPusher{Log: log},
 		Mailer: mailer, Storage: providers.LocalStorage{Dir: uploadDir, BaseURL: base}, Log: log,
 	})
+	// большинство сценариев проверяют сделку через площадку; прямые сделки — в direct_test.go
+	if err := setDealMode(ctx, true); err != nil {
+		fmt.Fprintln(os.Stderr, "settings:", err)
+		return 1
+	}
 	ts.Config.Handler = srv.Handler()
 	ts.Start()
 	defer ts.Close()
@@ -283,4 +289,19 @@ func login(t *testing.T, email, password string) (string, string) {
 	}
 	r.into(t, &out)
 	return out.Tokens.Access, out.Tokens.Refresh
+}
+
+// setDealMode включает или выключает «Безопасную сделку» (и платное продвижение) в настройках платформы.
+func setDealMode(ctx context.Context, safe bool) error {
+	cfg := domain.DefaultSettings()
+	cfg.SafeDeals, cfg.PromotionSales = safe, safe
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO platform_settings (id, data) VALUES (1, $1)
+		ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`, raw); err != nil {
+		return err
+	}
+	return srv.LoadSettings(ctx)
 }

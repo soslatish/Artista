@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ApiError, errorText } from '@/api/client';
-import { useDetailedStats, usePromotions, useStats } from '@/api/hooks';
+import { useDetailedStats, usePromotions, useSafeDeals, useStats } from '@/api/hooks';
 import type { DetailedStats } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
@@ -30,16 +30,24 @@ const sourceLabels: Record<string, string> = {
 };
 
 export default function StatsScreen() {
-  const t = useT();
-  const styles = useStyles();
   const { user } = useSession();
   const q = useStats(user?.role === 'artist');
   if (q.isLoading) return <Loading />;
   if (!q.data) return <ErrorState text={errorText(q.error)} onRetry={() => q.refetch()} />;
   const s = q.data;
   return (
+    <StatsBody s={s} />
+  );
+}
+
+function StatsBody({ s }: { s: NonNullable<ReturnType<typeof useStats>['data']> }) {
+  const t = useT();
+  const styles = useStyles();
+  const { user } = useSession();
+  const safeDeals = useSafeDeals();
+  return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
+      {safeDeals ? <View style={styles.hero}>
         <T variant="small" color="rgba(255,255,255,0.72)">
           {t('Выручка за этот месяц')}
         </T>
@@ -49,14 +57,14 @@ export default function StatsScreen() {
         <T variant="small" color="rgba(255,255,255,0.72)">
           {t('Продано работ: {n}. После комиссии.', { n: s.sales_month })}
         </T>
-      </View>
+      </View> : null}
       <View style={styles.grid}>
         <Cell label={t('Просмотры работ')} value={String(s.total_views)} />
         <Cell label={t('В избранном')} value={String(s.total_favorites)} />
         <Cell label={t('Подписчики')} value={String(s.followers)} />
         <Cell label={t('В продаже')} value={String(s.published_artworks)} />
-        <Cell label={t('Всего продаж')} value={String(s.sales_total)} />
-        <Cell label={t('Выручка за всё время')} value={formatPrice(s.revenue_total_kop)} />
+        {safeDeals ? <Cell label={t('Всего продаж')} value={String(s.sales_total)} /> : null}
+        {safeDeals ? <Cell label={t('Выручка за всё время')} value={formatPrice(s.revenue_total_kop)} /> : null}
       </View>
       {s.active_orders > 0 ? <Button title={t('Активные заказы: {n}', { n: s.active_orders })} onPress={() => router.push({ pathname: '/orders', params: { role: 'artist' } })} /> : null}
       <Detailed isPremium={!!user?.is_premium} />
@@ -72,11 +80,12 @@ function Detailed({ isPremium }: { isPremium: boolean }) {
   const [days, setDays] = useState(30);
   const q = useDetailedStats(days, isPremium);
   const terms = usePlatformTerms();
+  const safeDeals = useSafeDeals();
   if (!isPremium || (q.error instanceof ApiError && q.error.code === 'premium_required')) {
     return (
       <View style={styles.premium}>
         <T variant="heading">{t('Откуда приходят покупатели')}</T>
-        <T variant="small">{t('С премиумом — просмотры по дням, источники, воронка от просмотра до продажи и 0% комиссии до {limit} в месяц.', { limit: terms.limit })}</T>
+        <T variant="small">{safeDeals ? t('С премиумом — просмотры по дням, источники, воронка от просмотра до продажи и 0% комиссии до {limit} в месяц.', { limit: terms.limit }) : t('С премиумом — работы выше в ленте, а здесь появятся просмотры по дням и источники, откуда приходят покупатели.')}</T>
         <Button title={t('Подробнее о премиуме')} variant="secondary" onPress={() => router.push('/premium')} />
       </View>
     );

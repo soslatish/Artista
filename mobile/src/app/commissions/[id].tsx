@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, post } from '@/api/client';
-import { keys, useCatalogMeta, useCommission } from '@/api/hooks';
+import { keys, useCatalogMeta, useCommission, useSafeDeals } from '@/api/hooks';
 import type { Commission } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { AddressFields } from '@/features/address-fields';
@@ -35,6 +35,7 @@ function CommissionScreen({ id }: { id: string }) {
 
 function CommissionView({ c }: { c: Commission }) {
   const t = useT();
+  const safeDeals = useSafeDeals();
   const styles = useStyles();
   const colors = useColors();
   const qc = useQueryClient();
@@ -109,7 +110,10 @@ function CommissionView({ c }: { c: Commission }) {
 
         {c.order_id ? <Button title={t('Перейти к заказу')} onPress={() => router.push({ pathname: '/orders/[id]', params: { id: c.order_id! } })} /> : null}
         {c.my_role === 'artist' && open ? <ArtistActions c={c} act={act} /> : null}
-        {c.my_role === 'buyer' && c.status === 'quoted' ? <AcceptForm c={c} act={act} /> : null}
+        {c.my_role === 'buyer' && c.status === 'quoted' ? safeDeals ? <AcceptForm c={c} act={act} /> : <DirectAccept c={c} act={act} /> : null}
+        {!safeDeals && c.status === 'accepted' && c.conversation_id ? (
+          <Notice tone="success" text={t('Договорённость принята. Оплату, сроки и доставку обсуждайте в чате — Artista в расчётах не участвует.')} />
+        ) : null}
         {c.my_role === 'buyer' && open ? (
           <Button
             title={t('Отменить запрос')}
@@ -127,6 +131,7 @@ type Act = (action: string, body?: object) => Promise<Commission | null>;
 
 function ArtistActions({ c, act }: { c: Commission; act: Act }) {
   const t = useT();
+  const safeDeals = useSafeDeals();
   const styles = useStyles();
   const [price, setPrice] = useState(c.quote_kop ? String(c.quote_kop / 100) : '');
   const [days, setDays] = useState(c.quote_days ? String(c.quote_days) : '');
@@ -164,9 +169,35 @@ function ArtistActions({ c, act }: { c: Commission; act: Act }) {
         </View>
       </View>
       <Field label={t('Комментарий')} value={note} onChangeText={setNote} multiline maxLength={1000} error={errors.note} placeholder={t('Например: два эскиза на выбор, холст на подрамнике')} />
-      <T variant="small">{t('Срок считается с подтверждения оплаченного заказа; ещё 2 дня даём на отправку. Предложение действует 7 дней.')}</T>
+      <T variant="small">{safeDeals ? t('Срок считается с подтверждения оплаченного заказа; ещё 2 дня даём на отправку. Предложение действует 7 дней.') : t('Предложение действует 7 дней. Оплату и доставку обсудите с покупателем в чате.')}</T>
       <Button title={c.status === 'quoted' ? t('Обновить предложение') : t('Отправить предложение')} loading={busy} disabled={!kop || !Number.isFinite(d)} onPress={quote} />
       <Button title={t('Отказаться')} variant="ghost" onPress={decline} />
+    </View>
+  );
+}
+
+/** Прямая сделка: покупатель принимает цену и срок, дальше стороны договариваются в чате. */
+function DirectAccept({ c, act }: { c: Commission; act: Act }) {
+  const t = useT();
+  const styles = useStyles();
+  const [busy, setBusy] = useState(false);
+  const accept = async () => {
+    setBusy(true);
+    try {
+      const next = await act('accept', { expected_price_kop: c.quote_kop });
+      if (next?.conversation_id) router.push({ pathname: '/chat/[id]', params: { id: next.conversation_id, name: next.artist.name, draft: '' } });
+    } catch {
+      /* ошибка уже показана */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={styles.form}>
+      <Divider />
+      <T variant="heading">{t('Принять предложение')}</T>
+      <T variant="small">{t('Художник получит уведомление и начнёт работу. Оплату и доставку вы обсуждаете с ним напрямую в чате.')}</T>
+      <Button title={t('Принять за {p}', { p: formatPrice(c.quote_kop ?? 0) })} loading={busy} onPress={accept} />
     </View>
   );
 }

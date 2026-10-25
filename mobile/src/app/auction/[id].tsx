@@ -5,9 +5,10 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
-import { keys, useAuction } from '@/api/hooks';
+import { keys, useAuction, useSafeDeals } from '@/api/hooks';
 import type { Auction } from '@/api/types';
 import { useSession } from '@/auth/session';
+import { useContactArtist } from '@/features/contact-artist';
 import { useT } from '@/i18n';
 import { confirmAction } from '@/lib/confirm';
 import { formatCountdown, formatMessageTime, formatPrice, formatTimeLeft, parseRubles } from '@/lib/format';
@@ -31,6 +32,8 @@ function AuctionScreen({ id }: { id: string }) {
 }
 
 function AuctionView({ a }: { a: Auction }) {
+  const safeDeals = useSafeDeals();
+  const { contact, busy: contacting } = useContactArtist();
   const t = useT();
   const styles = useStyles();
   const colors = useColors();
@@ -102,8 +105,28 @@ function AuctionView({ a }: { a: Auction }) {
 
       {a.i_won ? (
         <View style={styles.win}>
-          <Notice tone="success" text={a.checkout_until ? t('Вы выиграли! Оформите заказ в течение {left}.', { left: formatTimeLeft(a.checkout_until) }) : t('Вы выиграли этот аукцион.')} />
-          {a.checkout_until ? <Button title={t('Оформить заказ')} onPress={() => router.push({ pathname: '/checkout/[artworkId]', params: { artworkId: a.artwork_id } })} /> : null}
+          {safeDeals ? (
+            <>
+              <Notice tone="success" text={a.checkout_until ? t('Вы выиграли! Оформите заказ в течение {left}.', { left: formatTimeLeft(a.checkout_until) }) : t('Вы выиграли этот аукцион.')} />
+              {a.checkout_until ? <Button title={t('Оформить заказ')} onPress={() => router.push({ pathname: '/checkout/[artworkId]', params: { artworkId: a.artwork_id } })} /> : null}
+            </>
+          ) : (
+            <>
+              <Notice tone="success" text={t('Вы выиграли! Напишите художнику, чтобы договориться об оплате и доставке.')} />
+              <Button
+                title={t('Написать художнику')}
+                loading={contacting}
+                onPress={() =>
+                  void contact({
+                    artistId: a.artist_id,
+                    artistName: '',
+                    artworkId: a.artwork_id,
+                    draft: t('Здравствуйте! Моя ставка {p} на «{title}» победила в аукционе. Как удобнее оплатить и получить работу?', { title: a.artwork.title, p: formatPrice(a.current_kop ?? a.start_kop) }),
+                  })
+                }
+              />
+            </>
+          )}
         </View>
       ) : null}
       {live && a.is_leader ? <Notice tone="success" text={t('Ваша ставка лидирует. Пришлём уведомление, если её перебьют.')} /> : null}

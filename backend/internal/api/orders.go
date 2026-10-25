@@ -139,6 +139,9 @@ func loadOrder(ctx context.Context, q querier, id, viewerID string) (orderDTO, e
 const maxUnpaidOrders = 3
 
 func (s *Server) createOrder(w http.ResponseWriter, r *http.Request, u httpx.User) error {
+	if domain.CurrentSettings().DirectDeals() {
+		return httpx.Conflict("direct_deals", "Работы покупаются напрямую у художника — напишите ему в чат")
+	}
 	var in struct {
 		ArtworkID      string  `json:"artwork_id"`
 		DeliveryMethod string  `json:"delivery_method"`

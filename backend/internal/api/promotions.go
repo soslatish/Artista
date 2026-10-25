@@ -34,6 +34,9 @@ func (s *Server) promoteArtwork(w http.ResponseWriter, r *http.Request, u httpx.
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err
 	}
+	if !domain.CurrentSettings().PromotionSales {
+		return httpx.Conflict("promotion_disabled", "Продвижение работ входит в Премиум")
+	}
 	if !s.socialLimiter.Allow("promote:" + u.ID) {
 		return httpx.TooMany()
 	}

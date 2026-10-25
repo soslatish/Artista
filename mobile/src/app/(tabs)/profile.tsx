@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText, post } from '@/api/client';
+import { useSafeDeals } from '@/api/hooks';
 import type { AuthResponse } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
@@ -16,6 +17,7 @@ import { makeStyles, radius, space, useColors } from '@/ui/theme';
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const terms = usePlatformTerms();
+  const safeDeals = useSafeDeals();
   const t = useT();
   const styles = useStyles();
   const { user, signOut, applyAuth } = useSession();
@@ -96,7 +98,7 @@ export default function ProfileScreen() {
           <Item icon="stats-chart-outline" label={t('Статистика')} href="/stats" />
           <Item
             icon="brush-outline"
-            label={user.is_premium && user.premium_until ? t('Премиум до {date}', { date: formatDate(user.premium_until) }) : t('Премиум — 0% комиссии')}
+            label={user.is_premium && user.premium_until ? t('Премиум до {date}', { date: formatDate(user.premium_until) }) : (safeDeals ? t('Премиум — 0% комиссии') : t('Премиум — продвижение в ленте'))}
             href="/premium"
           />
           <Item icon="settings-outline" label={t('Пауза и приём заказов')} href="/settings/workshop" />
@@ -104,7 +106,7 @@ export default function ProfileScreen() {
       ) : user.role === 'admin' ? null : (
         <View style={styles.becomeArtist}>
           <T variant="heading">{t('Продаёте свои работы?')}</T>
-          <T variant="small">{t('Откройте мастерскую: размещение бесплатно, комиссия только с продажи — {pct}.', { pct: terms.pct })}</T>
+          <T variant="small">{safeDeals ? t('Откройте мастерскую: размещение бесплатно, комиссия только с продажи — {pct}.', { pct: terms.pct }) : t('Откройте мастерскую: размещение бесплатно, без комиссии с продаж — покупатели пишут вам напрямую.')}</T>
           {error ? <Notice tone="danger" text={error} /> : null}
           <Button title={t('Стать художником')} variant="secondary" loading={busy} onPress={becomeArtist} />
         </View>

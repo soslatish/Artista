@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useSafeDeals } from '@/api/hooks';
 import { useT } from '@/i18n';
 import { Button, T } from '@/ui/primitives';
 import { makeStyles, space } from '@/ui/theme';
@@ -10,13 +11,14 @@ import { makeStyles, space } from '@/ui/theme';
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const t = useT();
+  const safeDeals = useSafeDeals();
   const styles = useStyles();
   return (
     <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom + space.lg }]}>
       <View style={styles.center}>
         <Image source={require('@/assets/images/splash-logo.png')} style={styles.logo} contentFit="contain" accessibilityLabel="Artista" />
         <T variant="body" center color="rgba(255,255,255,0.72)" style={styles.lead}>
-          {t('Оригинальные работы художников — напрямую от автора. Деньги поступают художнику только после того, как вы получите работу.')}
+          {safeDeals ? t('Оригинальные работы художников — напрямую от автора. Деньги поступают художнику только после того, как вы получите работу.') : t('Оригинальные работы художников — напрямую от автора, без наценки и посредников.')}
         </T>
       </View>
       <View style={styles.actions}>

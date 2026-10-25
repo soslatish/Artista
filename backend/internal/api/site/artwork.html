@@ -19,7 +19,7 @@
     <p class="price">{{if .AuctionKop}}Ставка {{rub .AuctionKop}}{{else}}{{rub .PriceKop}}{{end}}</p>
     {{with .Description}}<p class="desc">{{.}}</p>{{end}}
     <div class="actions">{{template "web" $}}<a class="btn btn--line only-touch" href="artista://artwork/{{.ID}}">Открыть в приложении</a></div>
-    <p class="trust">Купить работу можно прямо в браузере — в том числе из Telegram — или в приложении Artista. Оплата хранится у нас, пока вы не подтвердите получение.</p>
+    <p class="trust">{{if $.SafeDeals}}Купить работу можно прямо в браузере — в том числе из Telegram — или в приложении Artista. Оплата хранится у нас, пока вы не подтвердите получение.{{else}}Напишите художнику в браузере — в том числе из Telegram — или в приложении Artista: оплату и доставку вы обсуждаете с ним напрямую.{{end}}</p>
     {{template "stores" $}}
   </div>
 </article>

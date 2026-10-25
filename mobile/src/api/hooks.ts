@@ -119,6 +119,21 @@ export function useFeature(name: 'registration' | 'offers' | 'auctions' | 'commi
   return data?.features?.[name] ?? true;
 }
 
+/**
+ * Оплата работ через Artista («Безопасная сделка»). Выключена — покупатель договаривается с художником в чате.
+ * Пока условия не загрузились, считаем, что выключена: не обещаем гарантий, которых может не быть.
+ */
+export function useSafeDeals(): boolean {
+  const { data } = useCatalogMeta();
+  return data?.features?.safe_deals ?? false;
+}
+
+/** Продажа продвижения отдельных работ (иначе продвижение в ленте даёт только Премиум). */
+export function usePromotionSales(): boolean {
+  const { data } = useCatalogMeta();
+  return data?.features?.promotion_sales ?? false;
+}
+
 export const useArtworks = (filters: CatalogFilters) =>
   usePaged<Artwork>(keys.artworks(filters), '/artworks', filters as Record<string, string | number | undefined>);
 

@@ -23,11 +23,12 @@ export default function ChatRoute() {
   const id = validId(params.id);
   const t = useT();
   const name = typeof params.name === 'string' ? params.name.slice(0, 80) : '';
+  const draft = typeof params.draft === 'string' ? params.draft.slice(0, 500) : '';
   if (!id) return <ErrorState text={t('Ссылка повреждена.')} />;
-  return <Chat id={id} name={name} />;
+  return <Chat id={id} name={name} draft={draft} />;
 }
 
-function Chat({ id, name }: { id: string; name: string }) {
+function Chat({ id, name, draft }: { id: string; name: string; draft: string }) {
   const t = useT();
   const styles = useStyles();
   const colors = useColors();
@@ -35,7 +36,7 @@ function Chat({ id, name }: { id: string; name: string }) {
   const qc = useQueryClient();
   const { user } = useSession();
   const q = useMessages(id);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(draft);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [viewer, setViewer] = useState<string | null>(null);
