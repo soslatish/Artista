@@ -58,6 +58,12 @@ func run(log *slog.Logger) error {
 		Storage:  providers.LocalStorage{Dir: cfg.UploadDir, BaseURL: cfg.PublicBaseURL},
 		Log:      log,
 	})
+	if err := srv.LoadSettings(ctx); err != nil {
+		return err
+	}
+	if err := srv.BootstrapAdmin(ctx); err != nil {
+		return err
+	}
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	srv.StartWorker(workerCtx)
 	// при любом выходе: остановить воркер и дождаться фоновых задач до закрытия пула БД (defer выше)

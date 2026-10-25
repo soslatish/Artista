@@ -49,7 +49,7 @@ export function setFetch(f: Fetch) {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   form?: FormData;
   auth?: boolean;
@@ -179,6 +179,10 @@ export async function get<T>(path: string, query?: RequestOptions['query']): Pro
 
 export async function post<T>(path: string, body?: unknown): Promise<T> {
   return (await request<T>(path, { method: 'POST', body })).data;
+}
+
+export async function put<T>(path: string, body: unknown): Promise<T> {
+  return (await request<T>(path, { method: 'PUT', body })).data;
 }
 
 export async function patch<T>(path: string, body: unknown): Promise<T> {

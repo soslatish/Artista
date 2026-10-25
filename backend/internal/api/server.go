@@ -142,9 +142,15 @@ func (s *Server) authed(fn func(w http.ResponseWriter, r *http.Request, u httpx.
 // adminOnly — только для администраторов.
 func (s *Server) adminOnly(fn func(w http.ResponseWriter, r *http.Request, u httpx.User) error) http.HandlerFunc {
 	return s.authed(func(w http.ResponseWriter, r *http.Request, u httpx.User) error {
-		if u.Role != "admin" {
+		// роль проверяем по базе: снятый администратор теряет доступ сразу, а не когда истечёт токен
+		var role string
+		if err := s.DB.QueryRow(r.Context(), `SELECT role FROM users WHERE id = $1`, u.ID).Scan(&role); err != nil && !isNoRows(err) {
+			return err
+		}
+		if role != "admin" {
 			return httpx.Forbidden("Только для администраторов")
 		}
+		u.Role = role
 		return fn(w, r, u)
 	})
 }
@@ -308,6 +314,25 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+v+"/admin/collections", s.adminOnly(s.adminCreateCollection))
 	mux.HandleFunc("PATCH "+v+"/admin/collections/{id}", s.adminOnly(s.adminUpdateCollection))
 	mux.HandleFunc("DELETE "+v+"/admin/collections/{id}", s.adminOnly(s.adminDeleteCollection))
+	mux.HandleFunc("GET "+v+"/admin/dashboard", s.adminOnly(s.adminDashboard))
+	mux.HandleFunc("GET "+v+"/admin/settings", s.adminOnly(s.adminGetSettings))
+	mux.HandleFunc("PUT "+v+"/admin/settings", s.adminOnly(s.adminPutSettings))
+	mux.HandleFunc("GET "+v+"/admin/users", s.adminOnly(s.adminListUsers))
+	mux.HandleFunc("GET "+v+"/admin/users/{id}", s.adminOnly(s.adminGetUser))
+	mux.HandleFunc("PATCH "+v+"/admin/users/{id}", s.adminOnly(s.adminPatchUser))
+	mux.HandleFunc("GET "+v+"/admin/artworks", s.adminOnly(s.adminListArtworks))
+	mux.HandleFunc("PATCH "+v+"/admin/artworks/{id}", s.adminOnly(s.adminPatchArtwork))
+	mux.HandleFunc("GET "+v+"/admin/orders", s.adminOnly(s.adminListOrders))
+	mux.HandleFunc("GET "+v+"/admin/orders/{id}", s.adminOnly(s.adminGetOrder))
+	mux.HandleFunc("POST "+v+"/admin/orders/{id}/{action}", s.adminOnly(s.adminOrderAction))
+	mux.HandleFunc("GET "+v+"/admin/payments", s.adminOnly(s.adminListPayments))
+	mux.HandleFunc("GET "+v+"/admin/deals/{kind}", s.adminOnly(s.adminListDeals))
+	mux.HandleFunc("POST "+v+"/admin/deals/{kind}/{id}/cancel", s.adminOnly(s.adminCancelDeal))
+	mux.HandleFunc("GET "+v+"/admin/content/{kind}", s.adminOnly(s.adminListContent))
+	mux.HandleFunc("POST "+v+"/admin/content/{kind}/{id}/hidden", s.adminOnly(s.adminSetContentHidden))
+	mux.HandleFunc("GET "+v+"/admin/certificates", s.adminOnly(s.adminListCertificates))
+	mux.HandleFunc("POST "+v+"/admin/broadcast", s.adminOnly(s.adminBroadcast))
+	mux.HandleFunc("GET "+v+"/admin/audit", s.adminOnly(s.adminListAudit))
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) error {

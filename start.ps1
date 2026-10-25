@@ -44,7 +44,12 @@ if ($firstRun) {
     'CORS_ORIGINS=*'
     'HTTP_PORT=8080'
   ) | Set-Content -Encoding ascii $envFile
-} else {
+}
+# администратор для локального запуска (админка: /app/admin)
+if (-not (Select-String -Path $envFile -Pattern '^ADMIN_EMAIL=' -Quiet)) {
+  Add-Content -Encoding ascii $envFile @('ADMIN_EMAIL=admin@demo.artista', 'ADMIN_PASSWORD=demo12345')
+}
+if (-not $firstRun) {
   # IP мог смениться — обновим адрес для ссылок на фото
   (Get-Content $envFile) -replace '^PUBLIC_BASE_URL=.*', "PUBLIC_BASE_URL=$api" | Set-Content -Encoding ascii $envFile
 }
@@ -72,6 +77,7 @@ if (-not (Test-Path $seeded)) {
 if ($Web) {
   Write-Host ''
   Write-Host 'Готово. Вход:  buyer@demo.artista / demo12345   художник: marina@demo.artista / demo12345' -ForegroundColor Green
+  Write-Host 'Админка:       admin@demo.artista / demo12345   ->  /app/admin' -ForegroundColor Green
   Write-Host "  сайт:          $api/"
   Write-Host "  веб-версия:    $api/app/"
   Write-Host "  с телефона (та же Wi-Fi, можно из Telegram): $api/app/"
@@ -87,6 +93,7 @@ if (-not (Test-Path 'node_modules')) {
 }
 Write-Host ''
 Write-Host 'Готово. Вход:  buyer@demo.artista / demo12345   художник: marina@demo.artista / demo12345' -ForegroundColor Green
+Write-Host 'Админка:       admin@demo.artista / demo12345   ->  /app/admin' -ForegroundColor Green
 Write-Host 'Сейчас запустится Expo:' -ForegroundColor Green
 Write-Host '  - телефон: отсканируйте QR-код в Expo Go (телефон и компьютер в одной Wi-Fi сети)'
 Write-Host '  - Android-эмулятор: нажмите a        - браузер: нажмите w'

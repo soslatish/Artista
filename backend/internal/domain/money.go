@@ -7,9 +7,7 @@ import (
 
 // Монетизация из бизнес-плана. Все суммы — в копейках.
 const (
-	CommissionRateBP    = 1500       // 15% в базисных пунктах
-	PremiumFreeLimitKop = 100_000_00 // 0% комиссии для премиума до 100 000 ₽/мес
-	PremiumPriceKop     = 990_00     // 990 ₽/мес
+	// комиссия, цена и лимит Премиума — в Settings (меняются в админке)
 	MinArtworkPriceKop  = 3_000_00
 	MaxArtworkPriceKop  = 500_000_00
 	FreeDeliveryFromKop = 50_000_00
@@ -19,14 +17,15 @@ const (
 // Commission считает комиссию платформы с продажи.
 // monthSalesKop — сумма уже завершённых продаж художника в текущем месяце.
 func Commission(priceKop int64, isPremium bool, monthSalesKop int64) int64 {
+	cfg := CurrentSettings()
 	taxable := priceKop
 	if isPremium {
-		remainingFree := PremiumFreeLimitKop - monthSalesKop
+		remainingFree := cfg.PremiumFreeLimitKop - monthSalesKop
 		if remainingFree > 0 {
 			taxable = max(priceKop-remainingFree, 0)
 		}
 	}
-	return (taxable*CommissionRateBP + 5000) / 10000
+	return (taxable*int64(cfg.CommissionBP) + 5000) / 10000
 }
 
 // DeliveryMethod — способ доставки.

@@ -12,7 +12,8 @@ function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (e.name !== '__tests__') walk(p, out);
+      // админка — внутренний инструмент на русском, её строки в словарь не входят
+      if (e.name !== '__tests__' && !(e.name === 'admin' && /[\\/](app|features)$/.test(dir))) walk(p, out);
     } else if (/\.tsx?$/.test(e.name) && !e.name.endsWith('.d.ts') && !p.endsWith(path.join('i18n', 'en.ts'))) out.push(p);
   }
   return out;

@@ -106,6 +106,9 @@ type reportDTO struct {
 	Resolution string     `json:"resolution"`
 	CreatedAt  time.Time  `json:"created_at"`
 	ResolvedAt *time.Time `json:"resolved_at"`
+	// для админки: кто пожаловался и на что (название работы, имя, текст)
+	ReporterName string `json:"reporter_name"`
+	TargetLabel  string `json:"target_label"`
 }
 
 func (s *Server) createReport(w http.ResponseWriter, r *http.Request, u httpx.User) error {
@@ -147,8 +150,16 @@ func (s *Server) listReports(w http.ResponseWriter, r *http.Request, _ httpx.Use
 		status = "open"
 	}
 	p := parsePage(r)
-	rows, err := s.DB.Query(r.Context(), fmt.Sprintf(`SELECT id, reporter_id, target_type, target_id, reason, status, resolution, created_at, resolved_at
-		FROM reports WHERE status = $1 ORDER BY created_at LIMIT %d OFFSET %d`, p.limit, p.offset), status)
+	rows, err := s.DB.Query(r.Context(), fmt.Sprintf(`SELECT rp.id, rp.reporter_id, rp.target_type, rp.target_id, rp.reason, rp.status, rp.resolution,
+			rp.created_at, rp.resolved_at, coalesce(u.name, ''),
+			coalesce(CASE rp.target_type
+				WHEN 'artwork' THEN (SELECT title FROM artworks WHERE id = rp.target_id)
+				WHEN 'user' THEN (SELECT name FROM users WHERE id = rp.target_id)
+				WHEN 'message' THEN (SELECT left(body, 200) FROM messages WHERE id = rp.target_id)
+				WHEN 'question' THEN (SELECT left(body, 200) FROM artwork_questions WHERE id = rp.target_id)
+				WHEN 'post' THEN (SELECT left(body, 200) FROM posts WHERE id = rp.target_id)
+			END, '')
+		FROM reports rp LEFT JOIN users u ON u.id = rp.reporter_id WHERE rp.status = $1 ORDER BY rp.created_at LIMIT %d OFFSET %d`, p.limit, p.offset), status)
 	if err != nil {
 		return err
 	}
@@ -156,7 +167,8 @@ func (s *Server) listReports(w http.ResponseWriter, r *http.Request, _ httpx.Use
 	items := []reportDTO{}
 	for rows.Next() {
 		var rp reportDTO
-		if err := rows.Scan(&rp.ID, &rp.ReporterID, &rp.TargetType, &rp.TargetID, &rp.Reason, &rp.Status, &rp.Resolution, &rp.CreatedAt, &rp.ResolvedAt); err != nil {
+		if err := rows.Scan(&rp.ID, &rp.ReporterID, &rp.TargetType, &rp.TargetID, &rp.Reason, &rp.Status, &rp.Resolution, &rp.CreatedAt, &rp.ResolvedAt,
+			&rp.ReporterName, &rp.TargetLabel); err != nil {
 			return err
 		}
 		items = append(items, rp)

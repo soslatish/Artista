@@ -28,6 +28,7 @@ type Config struct {
 	SupportEmail                                 string // адрес поддержки на сайте (необязательно)
 	UploadDir                                    string
 	WebAppDir                                    string
+	AdminEmail, AdminPassword                    string
 	MaxUploadBytes                               int64
 	PaymentsProvider                             string // stub
 	PushProvider                                 string // log
@@ -61,6 +62,8 @@ func Load() (Config, error) {
 		SupportEmail:            os.Getenv("SUPPORT_EMAIL"),
 		UploadDir:               env("UPLOAD_DIR", "./uploads"),
 		WebAppDir:               env("WEB_APP_DIR", "./webapp"),
+		AdminEmail:              os.Getenv("ADMIN_EMAIL"),
+		AdminPassword:           os.Getenv("ADMIN_PASSWORD"),
 		MaxUploadBytes:          int64Env("MAX_UPLOAD_BYTES", 10<<20),
 		PaymentsProvider:        env("PAYMENTS_PROVIDER", "stub"),
 		PushProvider:            env("PUSH_PROVIDER", "log"),
@@ -82,6 +85,10 @@ func Load() (Config, error) {
 	problems = append(problems, c.providerProblems()...)
 	if c.WorkerInterval <= 0 {
 		problems = append(problems, "WORKER_INTERVAL must be positive")
+	}
+	// в проде пароль администратора, создаваемого при старте, должен быть надёжным
+	if c.Env == "prod" && c.AdminPassword != "" && len(c.AdminPassword) < 14 {
+		problems = append(problems, "ADMIN_PASSWORD must be at least 14 characters in prod")
 	}
 	if len(problems) > 0 {
 		return Config{}, errors.New(strings.Join(problems, "; "))

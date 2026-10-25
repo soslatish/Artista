@@ -1,6 +1,20 @@
 // Английский словарь. Ключ — русская строка из кода или из ответа сервера (ошибки, справочники).
 // Новые строки находит scripts/extract-strings.mjs --missing; без перевода показывается русский текст.
 export const en: Record<string, string> = {
+  "{price} в месяц": "{price} a month",
+  "Администрирование": "Administration",
+  "Админка": "Admin panel",
+  "Комиссия Artista — {pct} с продажи. С премиумом — 0% на продажи до {limit} в месяц.": "Artista’s commission is {pct} of the sale. With Premium it’s 0% on sales up to {limit} a month.",
+  "На продажи до {limit} в календарный месяц. Сверх лимита — обычные {pct}.": "On sales up to {limit} per calendar month. Above the limit, the usual {pct}.",
+  "Откройте мастерскую: размещение бесплатно, комиссия только с продажи — {pct}.": "Open a workshop: listing is free, the only fee is {pct} of a sale.",
+  "Подключить за {price}": "Get it for {price}",
+  "Регистрация временно закрыта. Попробуйте позже.": "Sign-up is temporarily closed. Please try later.",
+  "С премиумом — просмотры по дням, источники, воронка от просмотра до продажи и 0% комиссии до {limit} в месяц.": "With Premium — views by day, sources, the funnel from view to sale and 0% commission up to {limit} a month.",
+  "Регистрация временно закрыта": "Sign-up is temporarily closed",
+  "Предложения цены временно недоступны": "Price offers are temporarily unavailable",
+  "Аукционы временно недоступны": "Auctions are temporarily unavailable",
+  "Заказы на создание работ временно недоступны": "Commissions are temporarily unavailable",
+  "Отменён администратором": "Cancelled by an administrator",
   "Назад": "Back",
   "Ещё": "More",
   "Войдите в аккаунт": "Sign in to your account",

@@ -108,6 +108,9 @@ func (s *Server) createOffer(w http.ResponseWriter, r *http.Request, u httpx.Use
 		if status != "published" {
 			return httpx.Conflict("artwork_unavailable", "Работа сейчас не продаётся")
 		}
+		if !domain.CurrentSettings().OffersEnabled {
+			return httpx.Conflict("feature_disabled", "Предложения цены временно недоступны")
+		}
 		if !allow {
 			return httpx.Conflict("offers_disabled", "Художник не принимает предложения цены за эту работу")
 		}

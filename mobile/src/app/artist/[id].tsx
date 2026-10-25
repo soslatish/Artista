@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { FlatList, Linking, Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, post } from '@/api/client';
-import { flatten, useFollow, useReviews, useUser, useUserArtworks, useUserPosts, useUserSeries } from '@/api/hooks';
+import { flatten, useFeature, useFollow, useReviews, useUser, useUserArtworks, useUserPosts, useUserSeries } from '@/api/hooks';
 import type { Conversation, Post, PublicUser } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { shareLink } from '@/features/share';
@@ -69,6 +69,7 @@ function ArtistHeader({ u, tab, onTab, seriesId, onSeries }: HeaderProps) {
   const styles = useStyles();
   const colors = useColors();
   const { user } = useSession();
+  const commissionsOn = useFeature('commissions');
   const follow = useFollow(u.id);
   const series = useUserSeries(u.id);
   const [error, setError] = useState('');
@@ -148,7 +149,7 @@ function ArtistHeader({ u, tab, onTab, seriesId, onSeries }: HeaderProps) {
             />
             <Button title={t('Написать')} variant="secondary" style={styles.flex} loading={busy} onPress={write} />
           </View>
-          {u.accepts_commissions && !u.on_vacation ? (
+          {u.accepts_commissions && !u.on_vacation && commissionsOn ? (
             <View style={styles.commission}>
               <T variant="heading">{t('Принимает заказы')}</T>
               {u.commission_note ? <T variant="small">{u.commission_note}</T> : null}

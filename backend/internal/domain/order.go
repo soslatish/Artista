@@ -47,6 +47,7 @@ const (
 	ActorBuyer  Actor = "buyer"
 	ActorArtist Actor = "artist"
 	ActorSystem Actor = "system"
+	ActorAdmin  Actor = "admin" // администратор: разбор споров
 )
 
 var (
@@ -66,13 +67,14 @@ type rule struct {
 
 var transitions = map[transition]rule{
 	{StatusAwaitingPayment, ActionPay}:    {StatusPaid, []Actor{ActorSystem}},
-	{StatusAwaitingPayment, ActionCancel}: {StatusCancelled, []Actor{ActorBuyer, ActorSystem}},
+	{StatusAwaitingPayment, ActionCancel}: {StatusCancelled, []Actor{ActorBuyer, ActorSystem, ActorAdmin}},
 	{StatusPaid, ActionConfirm}:           {StatusConfirmed, []Actor{ActorArtist}},
 	{StatusPaid, ActionDecline}:           {StatusCancelled, []Actor{ActorArtist}},
-	{StatusPaid, ActionCancel}:            {StatusCancelled, []Actor{ActorBuyer, ActorSystem}},
+	{StatusPaid, ActionCancel}:            {StatusCancelled, []Actor{ActorBuyer, ActorSystem, ActorAdmin}},
 	{StatusConfirmed, ActionShip}:         {StatusShipped, []Actor{ActorArtist}},
-	{StatusConfirmed, ActionCancel}:       {StatusCancelled, []Actor{ActorSystem}},
-	{StatusShipped, ActionComplete}:       {StatusCompleted, []Actor{ActorBuyer, ActorSystem}},
+	{StatusConfirmed, ActionCancel}:       {StatusCancelled, []Actor{ActorSystem, ActorAdmin}},
+	{StatusShipped, ActionComplete}:       {StatusCompleted, []Actor{ActorBuyer, ActorSystem, ActorAdmin}},
+	{StatusShipped, ActionCancel}:         {StatusCancelled, []Actor{ActorAdmin}}, // спор: работа не пришла или не та
 }
 
 // NextStatus возвращает новый статус или ошибку, если переход невозможен
@@ -130,5 +132,5 @@ func TimeoutAction(status OrderStatus) (OrderAction, bool) {
 
 // NeedsRefund — нужно ли возвращать деньги при отмене из данного статуса.
 func NeedsRefund(from OrderStatus) bool {
-	return from == StatusPaid || from == StatusConfirmed
+	return from == StatusPaid || from == StatusConfirmed || from == StatusShipped
 }

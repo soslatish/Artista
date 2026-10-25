@@ -110,7 +110,14 @@ export interface CatalogFilters {
   artist_id?: string;
 }
 
-export const useCatalogMeta = () => useQuery({ queryKey: keys.meta, queryFn: () => get<CatalogMeta>('/catalog/meta'), staleTime: Infinity });
+// справочники и условия платформы; условия меняются в админке, поэтому перечитываем раз в 10 минут
+export const useCatalogMeta = () => useQuery({ queryKey: keys.meta, queryFn: () => get<CatalogMeta>('/catalog/meta'), staleTime: 10 * 60_000 });
+
+/** Включена ли функция платформы (по умолчанию — да, пока условия не загрузились). */
+export function useFeature(name: 'registration' | 'offers' | 'auctions' | 'commissions'): boolean {
+  const { data } = useCatalogMeta();
+  return data?.features?.[name] ?? true;
+}
 
 export const useArtworks = (filters: CatalogFilters) =>
   usePaged<Artwork>(keys.artworks(filters), '/artworks', filters as Record<string, string | number | undefined>);

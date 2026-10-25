@@ -6,7 +6,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, useWindowDimensions, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText, post } from '@/api/client';
-import { useArchiveArtwork, useArtwork, useCatalogMeta, useSimilar, useToggleFavorite } from '@/api/hooks';
+import { useArchiveArtwork, useArtwork, useCatalogMeta, useFeature, useSimilar, useToggleFavorite } from '@/api/hooks';
 import type { Artwork, Conversation } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { QuestionsBlock } from '@/features/questions';
@@ -56,7 +56,8 @@ function ArtworkView({ a }: { a: Artwork }) {
   const hasLock = !!a.my_price_kop;
   // бронь цены (принятое предложение, выигранный аукцион) позволяет оформить заказ и во время паузы
   const canBuy = !mine && ((a.status === 'published' && (!onVacation || hasLock)) || (a.status === 'reserved' && hasLock));
-  const canOffer = canBuy && a.allow_offers && !hasLock;
+  const offersOn = useFeature('offers');
+  const canOffer = canBuy && a.allow_offers && !hasLock && offersOn;
   const frameHeight = Math.min(width / previewAspect(a), width * 1.25);
   const rooms = a.rooms.map((r) => t(labelOf(meta, 'rooms', r))).filter(Boolean);
   const details = [
@@ -310,6 +311,7 @@ function OwnerTools({ a, onArchive, archiving }: { a: Artwork; onArchive: () => 
   const t = useT();
   const styles = useStyles();
   const editable = a.status === 'draft' || a.status === 'published' || a.status === 'archived' || a.status === 'scheduled';
+  const auctionsOn = useFeature('auctions');
   return (
     <View style={styles.owner}>
       <T variant="heading">{t('Управление работой')}</T>
@@ -317,7 +319,7 @@ function OwnerTools({ a, onArchive, archiving }: { a: Artwork; onArchive: () => 
       {a.status === 'published' || a.status === 'auction' ? (
         <Button title={a.is_promoted ? t('Продлить продвижение') : t('Продвинуть в ленте')} variant="secondary" icon="trending-up-outline" onPress={() => router.push({ pathname: '/promote/[id]', params: { id: a.id } })} />
       ) : null}
-      {a.status === 'published' || a.status === 'draft' ? (
+      {auctionsOn && (a.status === 'published' || a.status === 'draft') ? (
         <Button title={t('Выставить на аукцион')} variant="secondary" icon="hammer-outline" onPress={() => router.push({ pathname: '/auction/new/[artworkId]', params: { artworkId: a.id } })} />
       ) : null}
       {a.status === 'auction' && a.auction ? <Button title={t('Ход аукциона')} variant="secondary" onPress={() => router.push({ pathname: '/auction/[id]', params: { id: a.auction!.id } })} /> : null}

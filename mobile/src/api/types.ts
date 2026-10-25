@@ -121,6 +121,11 @@ export interface CatalogMeta {
   rooms: Option[];
   promotion_tariffs: { days: number; price_kop: number }[];
   offer_min_share_bp: number;
+  premium_free_limit_kop?: number;
+  /** объявление администратора для всех (пусто — нет) */
+  announcement?: string;
+  /** выключенные администратором функции: registration, offers, auctions, commissions */
+  features?: Record<string, boolean>;
 }
 
 export interface ColorOption extends Option {

@@ -74,6 +74,8 @@ backend/
 | exhibitions / exhibition_reminders | artist_id, title, starts_at, opened_at, cancelled_at; artworks.exhibition_id |
 | posts / post_likes, artwork_questions | лента мастерских и вопросы о работе |
 | promotions | artwork_id, days, price_kop, status, starts_at, ends_at; оплата через payments (purpose=promotion) |
+| platform_settings | одна строка jsonb с параметрами платформы; сервер перечитывает её на каждом шаге воркера |
+| admin_actions | журнал действий администраторов: admin_id, action, target, details |
 
 Новые поля: `artworks.palette, rooms, allow_offers`, статусы `scheduled / auction / commission`;
 `users.vacation_until, accepts_commissions, commission_note, locale`; `orders.kind, price_lock_id, ship_days`;
@@ -130,6 +132,15 @@ backend/
 | POST/GET | /artworks/{id}/promote, /me/promotions | продвижение |
 | GET | /me/stats/detailed?days= | расширенная статистика (премиум) |
 | POST | /assistant/artwork | помощник описания |
+| GET | /admin/dashboard | сводка для админки |
+| GET/PUT | /admin/settings | параметры платформы (комиссия, Премиум, тарифы, функции, объявление) |
+| GET/PATCH | /admin/users, /admin/users/{id} | пользователи: блокировка, роль, Премиум, профиль |
+| GET/PATCH | /admin/artworks, /admin/artworks/{id} | работы: статус, цена, название |
+| GET/POST | /admin/orders, /admin/orders/{id}, /admin/orders/{id}/{cancel\|complete} | заказы и споры |
+| GET | /admin/payments, /admin/certificates, /admin/audit | платежи, сертификаты, журнал |
+| GET/POST | /admin/deals/{kind}, /admin/deals/{kind}/{id}/cancel | аукционы, предложения, заказы на создание, выставки |
+| GET/POST | /admin/content/{kind}, /admin/content/{kind}/{id}/hidden | посты и вопросы |
+| POST | /admin/broadcast | рассылка уведомлений |
 
 Сайт (без префикса): `/`, `/a/{id}`, `/u/{id}`, `/e/{id}`, `/c/{code}`, `/collections/{slug}`, `/legal/{doc}`,
 `/sitemap.xml`, `/robots.txt`, `/.well-known/assetlinks.json`, `/.well-known/apple-app-site-association`.

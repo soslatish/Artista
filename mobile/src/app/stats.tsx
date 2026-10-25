@@ -9,6 +9,7 @@ import type { DetailedStats } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { formatDate, formatPrice } from '@/lib/format';
+import { usePlatformTerms } from '@/lib/terms';
 import { openArtwork } from '@/ui/artwork';
 import { Button, Chip, ErrorState, Loading, SectionHeader, T } from '@/ui/primitives';
 import { makeStyles, radius, space, useColors } from '@/ui/theme';
@@ -70,11 +71,12 @@ function Detailed({ isPremium }: { isPremium: boolean }) {
   const styles = useStyles();
   const [days, setDays] = useState(30);
   const q = useDetailedStats(days, isPremium);
+  const terms = usePlatformTerms();
   if (!isPremium || (q.error instanceof ApiError && q.error.code === 'premium_required')) {
     return (
       <View style={styles.premium}>
         <T variant="heading">{t('Откуда приходят покупатели')}</T>
-        <T variant="small">{t('С премиумом — просмотры по дням, источники, воронка от просмотра до продажи и 0% комиссии до 100 000 ₽ в месяц.')}</T>
+        <T variant="small">{t('С премиумом — просмотры по дням, источники, воронка от просмотра до продажи и 0% комиссии до {limit} в месяц.', { limit: terms.limit })}</T>
         <Button title={t('Подробнее о премиуме')} variant="secondary" onPress={() => router.push('/premium')} />
       </View>
     );

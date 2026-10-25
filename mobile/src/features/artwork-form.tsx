@@ -12,6 +12,7 @@ import type { AssistantSuggestion, Option } from '@/api/types';
 import { uploadImage } from '@/api/upload';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
+import { usePlatformTerms } from '@/lib/terms';
 import { formatPrice } from '@/lib/format';
 import { type ArtworkForm, validateArtworkForm } from '@/lib/validation';
 import { Button, Chip, Field, Notice, T, ToggleRow } from '@/ui/primitives';
@@ -29,6 +30,7 @@ interface Props {
 
 export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
   const t = useT();
+  const terms = usePlatformTerms();
   const styles = useStyles();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -210,7 +212,7 @@ export function ArtworkFormScreen({ artworkId, initial, isPublished }: Props) {
           onChange={(allowOffers) => setForm((f) => ({ ...f, allowOffers }))}
         />
 
-        <Notice text={t('Комиссия Artista — 15% с продажи. С премиумом — 0% на продажи до 100 000 ₽ в месяц.')} />
+        <Notice text={t('Комиссия Artista — {pct} с продажи. С премиумом — 0% на продажи до {limit} в месяц.', { pct: terms.pct, limit: terms.limit })} />
         {error ? <Notice tone="danger" text={error} /> : null}
         <Button title={isPublished ? t('Сохранить') : t('Опубликовать')} loading={save.isPending} disabled={uploading > 0} onPress={() => submit(true)} />
         {!isPublished ? <Button title={t('Сохранить черновик')} variant="secondary" disabled={save.isPending || uploading > 0} onPress={() => submit(false)} /> : null}

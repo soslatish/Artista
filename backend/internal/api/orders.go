@@ -420,6 +420,8 @@ type transitionReq struct {
 	timeout bool
 	expect  domain.OrderStatus
 	images  []string
+	// admin — действие администратора (userID при этом пуст)
+	admin bool
 }
 
 // errStale — заказ изменился после выборки воркером; переход пропускается.
@@ -468,6 +470,9 @@ func (s *Server) transitionTx(ctx context.Context, tx pgx.Tx, req transitionReq)
 		return e, errStale
 	}
 	actor := domain.ActorSystem
+	if req.admin {
+		actor = domain.ActorAdmin
+	}
 	switch req.userID {
 	case "":
 	case e.buyerID:
@@ -567,6 +572,8 @@ func defaultCancelReason(actor domain.Actor, from domain.OrderStatus) string {
 		return "Художник отказался от заказа"
 	case actor == domain.ActorBuyer:
 		return "Отменён покупателем"
+	case actor == domain.ActorAdmin:
+		return "Отменён администратором"
 	case from == domain.StatusAwaitingPayment:
 		return "Заказ не оплачен вовремя"
 	case from == domain.StatusPaid:
@@ -758,7 +765,7 @@ func (s *Server) buySubscription(w http.ResponseWriter, r *http.Request, u httpx
 	if u.Role != "artist" {
 		return httpx.Forbidden("Премиум доступен художникам")
 	}
-	p, err := s.createPayment(r.Context(), paymentSpec{userID: u.ID, purpose: "subscription", amount: domain.PremiumPriceKop, desc: "Artista Премиум — 30 дней"})
+	p, err := s.createPayment(r.Context(), paymentSpec{userID: u.ID, purpose: "subscription", amount: domain.CurrentSettings().PremiumPriceKop, desc: "Artista Премиум — 30 дней"})
 	if err != nil {
 		return err
 	}
@@ -920,6 +927,9 @@ func (s *Server) workerJobs() []workerJob {
 
 // RunWorkerOnce выполняет все задачи воркера один раз (тесты, ручной запуск).
 func (s *Server) RunWorkerOnce(ctx context.Context) {
+	if err := s.LoadSettings(ctx); err != nil {
+		s.Log.Error("reload settings", "err", err)
+	}
 	for _, j := range s.workerJobs() {
 		if n, err := j.run(ctx); err != nil {
 			s.Log.Error("worker job", "job", j.name, "err", err)

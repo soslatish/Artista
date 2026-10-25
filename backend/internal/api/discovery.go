@@ -266,6 +266,8 @@ type collectionDTO struct {
 	Position    int           `json:"position"`
 	IsPublished bool          `json:"is_published"`
 	Preview     []artworkDTO  `json:"preview,omitempty"`
+	// ArtworkIDs — состав ручной подборки (только в админке)
+	ArtworkIDs []string `json:"artwork_ids,omitempty"`
 }
 
 const collectionPreview = 8
@@ -491,6 +493,15 @@ func (s *Server) adminListCollections(w http.ResponseWriter, r *http.Request, _ 
 	}
 	if err := rows.Err(); err != nil {
 		return err
+	}
+	for i := range out {
+		if out[i].Kind != "manual" {
+			continue
+		}
+		if err := s.DB.QueryRow(r.Context(), `SELECT coalesce(array_agg(artwork_id::text ORDER BY position), '{}') FROM collection_items WHERE collection_id = $1`,
+			out[i].ID).Scan(&out[i].ArtworkIDs); err != nil {
+			return err
+		}
 	}
 	httpx.OK(w, out)
 	return nil

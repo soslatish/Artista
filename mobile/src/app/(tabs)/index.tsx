@@ -6,13 +6,13 @@ import { FlatList, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorText } from '@/api/client';
-import { type CatalogFilters, flatten, useArtworks, useCollections, useExhibitions, useNotifications, usePostsFeed } from '@/api/hooks';
+import { type CatalogFilters, flatten, useArtworks, useCatalogMeta, useCollections, useExhibitions, useNotifications, usePostsFeed } from '@/api/hooks';
 import type { Post } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { ArtworkStrip, Gallery } from '@/ui/artwork';
 import { ExhibitionCard, PostCard } from '@/ui/cards';
-import { Button, Chip, EmptyState, ErrorState, IconButton, Loading, SectionHeader } from '@/ui/primitives';
+import { Button, Chip, EmptyState, ErrorState, IconButton, Loading, Notice, SectionHeader } from '@/ui/primitives';
 import { makeStyles, space, useColors } from '@/ui/theme';
 
 type Feed = NonNullable<CatalogFilters['feed']> | 'posts';
@@ -66,6 +66,7 @@ function ArtworksFeed({ feed, chips }: { feed: Exclude<Feed, 'posts'>; chips: Re
   const q = useArtworks({ feed });
   const header = (
     <View style={{ marginHorizontal: -space.sm }}>
+      <Announcement />
       {chips}
       {feed === 'new' ? <Showcase /> : null}
     </View>
@@ -187,3 +188,15 @@ const useStyles = makeStyles((c) => ({
   pad: { paddingHorizontal: space.lg },
   strip: { gap: space.md, paddingHorizontal: space.lg },
 }));
+
+/** Объявление администратора (настраивается в админке). */
+function Announcement() {
+  const { data } = useCatalogMeta();
+  const text = data?.announcement?.trim();
+  if (!text) return null;
+  return (
+    <View style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
+      <Notice text={text} />
+    </View>
+  );
+}

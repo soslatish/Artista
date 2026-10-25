@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { errorText, fieldErrors, SITE_URL } from '@/api/client';
+import { useFeature } from '@/api/hooks';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { validateRegistration } from '@/lib/validation';
@@ -22,6 +23,7 @@ export default function RegisterScreen() {
   const colors = useColors();
   const { signUp } = useSession();
   const [role, setRole] = useState<RoleChoice>('buyer');
+  const registrationOpen = useFeature('registration');
   const [form, setForm] = useState({ name: '', email: '', password: '', city: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
@@ -74,7 +76,8 @@ export default function RegisterScreen() {
           error={errors.password}
         />
         <Field label={t('Город')} value={form.city} onChangeText={set('city')} placeholder={t('Для доставки и поиска')} />
-        <Button title={t('Создать аккаунт')} loading={busy} onPress={submit} />
+        {registrationOpen ? null : <Notice tone="danger" text={t('Регистрация временно закрыта. Попробуйте позже.')} />}
+        <Button title={t('Создать аккаунт')} loading={busy} disabled={!registrationOpen} onPress={submit} />
         <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`${SITE_URL}/legal/privacy`)}>
           <T variant="small" center>
             {t('Создавая аккаунт, вы принимаете пользовательское соглашение и политику конфиденциальности.')}

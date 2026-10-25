@@ -57,6 +57,9 @@ func (s *Server) issueTokens(ctx context.Context, q querier, userID, role string
 }
 
 func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
+	if !domain.CurrentSettings().RegistrationOpen {
+		return httpx.Forbidden("Регистрация временно закрыта")
+	}
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`

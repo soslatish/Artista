@@ -10,11 +10,12 @@ import { useSession } from '@/auth/session';
 import { TestPaymentSheet } from '@/features/test-payment';
 import { useT } from '@/i18n';
 import { formatDate } from '@/lib/format';
+import { usePlatformTerms } from '@/lib/terms';
 import { Button, type IconName, Notice, T } from '@/ui/primitives';
 import { makeStyles, space, useColors } from '@/ui/theme';
 
 const perks: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'cash-outline', title: '0% комиссии', text: 'На продажи до 100 000 ₽ в календарный месяц. Сверх лимита — обычные 15%.' },
+  { icon: 'cash-outline', title: '0% комиссии', text: 'На продажи до {limit} в календарный месяц. Сверх лимита — обычные {pct}.' },
   { icon: 'trending-up-outline', title: 'Выше в ленте', text: 'Ваши работы показываются раньше в разделах «Популярное» и «Для вас».' },
   { icon: 'stats-chart-outline', title: 'Расширенная статистика', text: 'Просмотры по дням, откуда приходят покупатели, воронка от просмотра до продажи.' },
   { icon: 'brush-outline', title: 'Отметка мастерской', text: 'Золотой мазок рядом с именем на карточках и в профиле.' },
@@ -22,6 +23,7 @@ const perks: { icon: IconName; title: string; text: string }[] = [
 
 export default function PremiumScreen() {
   const t = useT();
+  const terms = usePlatformTerms();
   const styles = useStyles();
   const colors = useColors();
   const { user, setUser } = useSession();
@@ -59,14 +61,14 @@ export default function PremiumScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <T variant="display">{t('Премиум мастерской')}</T>
       <T variant="priceLarge" color={colors.bordeaux}>
-        {t('990 ₽ в месяц')}
+        {t('{price} в месяц', terms)}
       </T>
       {perks.map((p) => (
         <View key={p.title} style={styles.perk}>
           <Ionicons name={p.icon} size={26} color={colors.gold} />
           <View style={styles.flex}>
             <T variant="heading">{t(p.title)}</T>
-            <T variant="small">{t(p.text)}</T>
+            <T variant="small">{t(p.text, terms)}</T>
           </View>
         </View>
       ))}
@@ -74,7 +76,7 @@ export default function PremiumScreen() {
       {done ? <Notice tone="success" text={t('Готово! Премиум подключён.')} /> : null}
       {error ? <Notice tone="danger" text={error} /> : null}
       {user?.role === 'artist' ? (
-        <Button title={user.is_premium ? t('Продлить на 30 дней') : t('Подключить за 990 ₽')} loading={busy} onPress={buy} />
+        <Button title={user.is_premium ? t('Продлить на 30 дней') : t('Подключить за {price}', terms)} loading={busy} onPress={buy} />
       ) : (
         <Notice text={t('Премиум доступен художникам. Откройте мастерскую в профиле.')} />
       )}

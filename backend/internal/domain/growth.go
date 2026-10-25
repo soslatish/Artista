@@ -75,16 +75,9 @@ type PromotionTariff struct {
 	PriceKop int64 `json:"price_kop"`
 }
 
-// PromotionTariffs — тарифы продвижения.
-var PromotionTariffs = []PromotionTariff{
-	{Days: 3, PriceKop: 199_00},
-	{Days: 7, PriceKop: 399_00},
-	{Days: 14, PriceKop: 699_00},
-}
-
-// PromotionPrice — цена продвижения на days дней; false, если такого тарифа нет.
+// PromotionPrice — цена продвижения на days дней по текущим тарифам; false, если такого тарифа нет.
 func PromotionPrice(days int) (int64, bool) {
-	for _, t := range PromotionTariffs {
+	for _, t := range CurrentSettings().Promotion {
 		if t.Days == days {
 			return t.PriceKop, true
 		}
@@ -95,7 +88,6 @@ func PromotionPrice(days int) (int64, bool) {
 // ---------- предложения цены ----------
 
 const (
-	OfferMinShareBP  = 5000           // предложение — не меньше 50% цены
 	OfferTTL         = 48 * time.Hour // художник отвечает за 48 часов
 	AcceptedOfferTTL = 24 * time.Hour // после согласия покупатель оформляет заказ за 24 часа
 )
@@ -110,7 +102,7 @@ func ValidateOffer(priceKop, amountKop int64) error {
 	if amountKop >= priceKop {
 		return ErrOfferTooHigh
 	}
-	if amountKop*10000 < priceKop*OfferMinShareBP || amountKop < MinArtworkPriceKop {
+	if amountKop*10000 < priceKop*int64(CurrentSettings().OfferMinShareBP) || amountKop < MinArtworkPriceKop {
 		return ErrOfferTooLow
 	}
 	return nil
@@ -118,7 +110,7 @@ func ValidateOffer(priceKop, amountKop int64) error {
 
 // OfferMinimum — минимальная сумма предложения для цены.
 func OfferMinimum(priceKop int64) int64 {
-	m := (priceKop*OfferMinShareBP + 9999) / 10000
+	m := (priceKop*int64(CurrentSettings().OfferMinShareBP) + 9999) / 10000
 	return max(m, MinArtworkPriceKop)
 }
 

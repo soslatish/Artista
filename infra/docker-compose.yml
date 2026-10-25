@@ -41,6 +41,9 @@ services:
       STORE_RUSTORE: ${STORE_RUSTORE:-https://www.rustore.ru/catalog/app/com.aleksandr.artista}
       STORE_APP_STORE: ${STORE_APP_STORE:-}
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      # администратор: аккаунт ADMIN_EMAIL получает роль admin; если его нет — создаётся с ADMIN_PASSWORD
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     volumes:
       - uploads:/data/uploads
     expose:

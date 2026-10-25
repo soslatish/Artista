@@ -130,6 +130,7 @@ function RootStack() {
         <Stack.Screen name="settings/workshop" options={title('Мастерская')} />
         <Stack.Screen name="settings/app" options={title('Оформление и язык')} />
         <Stack.Screen name="settings/delete" options={title('Удаление аккаунта')} />
+        <Stack.Screen name="admin" options={{ headerShown: false }} />
         <Stack.Screen name="a/[id]" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="u/[id]" options={{ headerShown: false, animation: 'none' }} />
         <Stack.Screen name="e/[id]" options={{ headerShown: false, animation: 'none' }} />

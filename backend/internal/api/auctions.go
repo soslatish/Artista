@@ -109,6 +109,9 @@ func (s *Server) startAuction(w http.ResponseWriter, r *http.Request, u httpx.Us
 	if err != nil {
 		return err
 	}
+	if !domain.CurrentSettings().AuctionsEnabled {
+		return httpx.Conflict("feature_disabled", "Аукционы временно недоступны")
+	}
 	if !s.socialLimiter.Allow("auction:" + u.ID) {
 		return httpx.TooMany()
 	}
@@ -197,6 +200,9 @@ func (s *Server) placeBid(w http.ResponseWriter, r *http.Request, u httpx.User) 
 	id, err := pathID(r, "id")
 	if err != nil {
 		return err
+	}
+	if !domain.CurrentSettings().AuctionsEnabled {
+		return httpx.Conflict("feature_disabled", "Аукционы временно недоступны")
 	}
 	if !s.socialLimiter.Allow("bid:" + u.ID) {
 		return httpx.TooMany()

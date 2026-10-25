@@ -114,6 +114,9 @@ func (in commissionInput) validate() map[string]string {
 
 // createCommission — запрос покупателя художнику.
 func (s *Server) createCommission(w http.ResponseWriter, r *http.Request, u httpx.User) error {
+	if !domain.CurrentSettings().CommissionsEnabled {
+		return httpx.Conflict("feature_disabled", "Заказы на создание работ временно недоступны")
+	}
 	var in commissionInput
 	if err := httpx.Decode(w, r, &in); err != nil {
 		return err

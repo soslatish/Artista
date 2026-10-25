@@ -86,9 +86,12 @@ type sitePage struct {
 	Title, Description, OGTitle, OGType, Canonical, Image, AppPath, Version, SupportEmail string
 	// WebApp — адрес веб-версии приложения (пусто, если сборка не установлена); WebPath — экран в ней
 	WebApp, WebPath string
-	Year            int
-	NoIndex         bool
-	Stores          siteStores
+	// условия из настроек платформы (меняются в админке)
+	CommissionPct           string
+	PremiumKop, PremiumFree int64
+	Year                    int
+	NoIndex                 bool
+	Stores                  siteStores
 
 	Wall, Recent, Similar, Works []siteArtwork
 	Artwork                      *siteArtwork
@@ -163,7 +166,8 @@ func (s *Server) basePage(r *http.Request, title, description string) sitePage {
 		Canonical: s.siteURL() + r.URL.Path, Image: s.siteURL() + "/static/og.jpg",
 		Version: siteVersion, Year: time.Now().In(moscow).Year(), SupportEmail: s.Config.SupportEmail,
 		Stores: siteStores{GooglePlay: s.Config.StoreGooglePlay, RuStore: s.Config.StoreRuStore, AppStore: s.Config.StoreAppStore},
-		WebApp: s.webAppURL(),
+		WebApp: s.webAppURL(), CommissionPct: percent(domain.CurrentSettings().CommissionBP),
+		PremiumKop: domain.CurrentSettings().PremiumPriceKop, PremiumFree: domain.CurrentSettings().PremiumFreeLimitKop,
 	}
 }
 
@@ -515,4 +519,9 @@ func (s *Server) siteRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/assetlinks.json", s.assetLinks)
 	mux.HandleFunc("GET /.well-known/apple-app-site-association", s.appleAppSiteAssociation)
 	mux.HandleFunc("/", s.siteNotFound)
+}
+
+// percent — базисные пункты в проценты: 1500 → «15%», 1250 → «12,5%».
+func percent(bp int) string {
+	return strings.Replace(strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.2f", float64(bp)/100), "0"), ".0"), ".", ",", 1) + "%"
 }

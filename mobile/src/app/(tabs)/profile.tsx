@@ -8,12 +8,14 @@ import { errorText, post } from '@/api/client';
 import type { AuthResponse } from '@/api/types';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
+import { usePlatformTerms } from '@/lib/terms';
 import { formatDate } from '@/lib/format';
 import { Avatar, Button, type IconName, Notice, PremiumMark, T } from '@/ui/primitives';
 import { makeStyles, radius, space, useColors } from '@/ui/theme';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const terms = usePlatformTerms();
   const t = useT();
   const styles = useStyles();
   const { user, signOut, applyAuth } = useSession();
@@ -75,6 +77,12 @@ export default function ProfileScreen() {
 
       {isArtist && onVacation ? <Notice text={t('Магазин на паузе до {date}. Покупатели видят работы, но купить их не могут.', { date: formatDate(user.vacation_until!) })} /> : null}
 
+      {user.role === 'admin' ? (
+        <Group title={t('Администрирование')}>
+          <Item icon="shield-checkmark-outline" label={t('Админка')} href="/admin" />
+        </Group>
+      ) : null}
+
       {isArtist ? (
         <Group title={t('Мастерская')}>
           <Item icon="add-circle-outline" label={t('Добавить работу')} href="/artwork/new" />
@@ -93,10 +101,10 @@ export default function ProfileScreen() {
           />
           <Item icon="settings-outline" label={t('Пауза и приём заказов')} href="/settings/workshop" />
         </Group>
-      ) : (
+      ) : user.role === 'admin' ? null : (
         <View style={styles.becomeArtist}>
           <T variant="heading">{t('Продаёте свои работы?')}</T>
-          <T variant="small">{t('Откройте мастерскую: размещение бесплатно, комиссия только с продажи — 15%.')}</T>
+          <T variant="small">{t('Откройте мастерскую: размещение бесплатно, комиссия только с продажи — {pct}.', { pct: terms.pct })}</T>
           {error ? <Notice tone="danger" text={error} /> : null}
           <Button title={t('Стать художником')} variant="secondary" loading={busy} onPress={becomeArtist} />
         </View>
