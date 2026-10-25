@@ -15,7 +15,7 @@ import { Line, SectionHeader, ToggleRow } from '@/ui/primitives';
 import { DealRow } from '@/ui/rows';
 
 const mockSession = { user: { id: 'me', role: 'artist' } as { id: string; role: string } | null };
-jest.mock('@/auth/session', () => ({ useSession: () => mockSession }));
+jest.mock('@/auth/session', () => ({ useSession: () => mockSession, useMaybeSession: () => mockSession }));
 
 const requests: string[] = [];
 beforeEach(() => {

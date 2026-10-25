@@ -146,6 +146,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return <SessionContext value={value}>{children}</SessionContext>;
 }
 
+/** Сессия, если есть провайдер (карточки рендерятся и в тестах без него). */
+export function useMaybeSession(): SessionValue | null {
+  return useContext(SessionContext);
+}
+
 export function useSession(): SessionValue {
   const v = useContext(SessionContext);
   if (!v) throw new Error('useSession must be used inside SessionProvider');

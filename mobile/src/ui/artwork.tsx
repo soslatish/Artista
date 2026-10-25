@@ -1,18 +1,21 @@
-// Карточка работы и галерея-«шпалера»: картина в своих пропорциях + музейная этикетка.
+// Плитка работы и сетка работ: квадратное фото, название, цена, художник — как в ленте объявлений.
 import { FlashList } from '@shopify/flash-list';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { memo, type ReactElement, useCallback } from 'react';
+import { memo, type ReactElement, useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { useCatalogMeta } from '@/api/hooks';
+import { useCatalogMeta, useToggleFavorite } from '@/api/hooks';
 import type { Artwork, ArtworkStatus, CatalogMeta } from '@/api/types';
 import { type TFunc, useT } from '@/i18n';
+import { useMaybeSession } from '@/auth/session';
 import { formatPrice, formatSize } from '@/lib/format';
+import { requireAuth } from '@/lib/guard';
 
 import { PremiumMark } from './primitives';
 import { useGalleryColumns } from './layout';
-import { fonts, makeStyles, radius, space, useColors } from './theme';
+import { fonts, hitSlop, makeStyles, radius, space, useColors } from './theme';
 
 const statusLabels: Record<ArtworkStatus, string> = {
   draft: 'Черновик',
@@ -61,6 +64,38 @@ interface CardProps {
   width?: number;
 }
 
+/** Сердечко на плитке: сразу меняет вид, при ошибке возвращает как было. */
+function FavoriteHeart({ artwork: a }: { artwork: Artwork }) {
+  const t = useT();
+  const colors = useColors();
+  const session = useMaybeSession();
+  const fav = useToggleFavorite();
+  const [on, setOn] = useState(a.is_favorite);
+  const [synced, setSynced] = useState(a.is_favorite);
+  // список перечитался (например, добавили в избранное на странице работы) — берём свежее значение
+  if (synced !== a.is_favorite) {
+    setSynced(a.is_favorite);
+    setOn(a.is_favorite);
+  }
+  if (session?.user?.id === a.artist.id) return null;
+  const toggle = () => {
+    if (!requireAuth(!!session?.user)) return;
+    const next = !on;
+    setOn(next);
+    fav.mutate({ id: a.id, on: next }, { onError: () => setOn(!next) });
+  };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={on ? t('Убрать из избранного') : t('В избранное')}
+      accessibilityState={{ selected: on }}
+      hitSlop={hitSlop}
+      onPress={toggle}>
+      <Ionicons name={on ? 'heart' : 'heart-outline'} size={22} color={on ? colors.bordeaux : colors.ink} />
+    </Pressable>
+  );
+}
+
 export const ArtworkCard = memo(function ArtworkCard({ artwork: a, showStatus, meta, src, width }: CardProps) {
   const t = useT();
   const styles = useStyles();
@@ -73,7 +108,7 @@ export const ArtworkCard = memo(function ArtworkCard({ artwork: a, showStatus, m
       accessibilityLabel={`${a.title}, ${a.artist.name}, ${formatPrice(displayPrice(a))}`}
       onPress={() => openArtwork(a.id, src)}
       style={({ pressed }) => [width ? { width } : styles.card, pressed && styles.pressed]}>
-      <View style={[styles.frame, { aspectRatio: previewAspect(a) }]}>
+      <View style={styles.frame}>
         {a.images[0] ? (
           <Image source={{ uri: a.images[0] }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={a.id} />
         ) : (
@@ -88,8 +123,15 @@ export const ArtworkCard = memo(function ArtworkCard({ artwork: a, showStatus, m
         ) : null}
       </View>
       <View style={styles.label}>
-        <Text style={styles.title} numberOfLines={2}>
-          {a.title}
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={2}>
+            {a.title}
+          </Text>
+          <FavoriteHeart artwork={a} />
+        </View>
+        <Text style={[styles.price, unavailable && styles.priceMuted]}>
+          {a.auction ? `${t('Ставка')} ` : ''}
+          {formatPrice(displayPrice(a))}
         </Text>
         <View style={styles.artistRow}>
           <Text style={styles.artist} numberOfLines={1}>
@@ -99,10 +141,6 @@ export const ArtworkCard = memo(function ArtworkCard({ artwork: a, showStatus, m
         </View>
         <Text style={styles.meta} numberOfLines={1}>
           {[technique, formatSize(a.width_cm, a.height_cm)].filter(Boolean).join(', ')}
-        </Text>
-        <Text style={[styles.price, unavailable && styles.priceMuted]}>
-          {a.auction ? `${t('Ставка')} ` : ''}
-          {formatPrice(displayPrice(a))}
         </Text>
         {a.is_promoted ? <Text style={styles.promoted}>{t('Продвижение')}</Text> : null}
       </View>
@@ -123,7 +161,7 @@ interface GalleryProps {
   src?: ViewSource;
 }
 
-/** Лента работ разной высоты (masonry): 2 колонки на телефоне, до 4 на широком экране. */
+/** Сетка работ ровными плитками: 2 колонки на телефоне, до 5 на мониторе. */
 export function Gallery({ items, loading, refreshing, onRefresh, onEndReached, loadingMore, header, empty, showStatus, src }: GalleryProps) {
   const { data: meta } = useCatalogMeta();
   const colors = useColors();
@@ -137,7 +175,6 @@ export function Gallery({ items, loading, refreshing, onRefresh, onEndReached, l
     <FlashList
       key={columns}
       data={items}
-      masonry
       numColumns={columns}
       keyExtractor={(a) => a.id}
       renderItem={renderItem}
@@ -172,9 +209,9 @@ export function ArtworkStrip({ items, src, cardWidth = 150 }: { items: Artwork[]
 const useStyles = makeStyles((c, t) => ({
   list: { backgroundColor: c.wall },
   gallery: { paddingHorizontal: space.sm, paddingBottom: space.xxl },
-  card: { paddingHorizontal: space.sm, paddingBottom: space.xl },
+  card: { flex: 1, paddingHorizontal: space.sm, paddingBottom: space.xl },
   pressed: { opacity: 0.9 },
-  frame: { width: '100%', backgroundColor: c.plaster, borderRadius: radius.art, overflow: 'hidden' },
+  frame: { width: '100%', aspectRatio: 1, backgroundColor: c.plaster, borderRadius: radius.tile, overflow: 'hidden' },
   noImage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   noImageText: { ...t.small },
   tag: {
@@ -184,16 +221,17 @@ const useStyles = makeStyles((c, t) => ({
     backgroundColor: 'rgba(30,26,27,0.78)',
     paddingHorizontal: space.sm,
     paddingVertical: 3,
-    borderRadius: radius.art,
+    borderRadius: 6,
   },
   tagLive: { backgroundColor: 'rgba(63,107,76,0.9)' },
   tagText: { fontFamily: fonts.sansSemi, fontSize: 12, color: '#FFFFFF' },
-  label: { paddingTop: space.sm, gap: 2 },
-  title: { ...t.artTitleSmall },
+  label: { paddingTop: space.sm, gap: 3 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  title: { ...t.body, lineHeight: 20, flex: 1 },
   artistRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  artist: { ...t.smallStrong, flexShrink: 1 },
+  artist: { ...t.small, flexShrink: 1 },
   meta: { ...t.small },
-  price: { ...t.price },
+  price: { ...t.price, fontSize: 17, lineHeight: 22 },
   priceMuted: { color: c.graphite },
   promoted: { ...t.small, fontSize: 11, color: c.gold },
   spinner: { marginVertical: space.xxl },

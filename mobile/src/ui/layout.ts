@@ -5,7 +5,7 @@ import { Platform, useWindowDimensions } from 'react-native';
  * как на планшете: так лента, шапка и меню не растягиваются на весь экран.
  * Админка — исключение, ей нужна вся ширина (см. корневой _layout).
  */
-export const APP_MAX_WIDTH = 1080;
+export const APP_MAX_WIDTH = 1280;
 
 export const contentWidth = { wide: APP_MAX_WIDTH, page: 720 } as const;
 
@@ -23,10 +23,11 @@ export function useContentWidth(max: number = contentWidth.page): number {
   return isWeb ? Math.min(app, max) : app;
 }
 
-/** Колонки ленты: 2 на телефоне, 3 на планшете и узком окне, 4 на мониторе. */
+/** Колонки сетки работ: 2 на телефоне, 3–4 на планшете и узком окне, 5 на мониторе. */
 export function useGalleryColumns(): number {
   const w = useAppWidth();
-  if (w >= 900) return 4;
-  if (w >= 600) return 3;
+  if (w >= 1100) return 5;
+  if (w >= 800) return 4;
+  if (w >= 560) return 3;
   return 2;
 }

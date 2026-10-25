@@ -60,14 +60,20 @@ const meta = {
 };
 
 describe('ArtworkCard', () => {
-  it('shows a museum label and opens the artwork', async () => {
+  it('shows title, price and artist and opens the artwork', async () => {
     await wrap(<ArtworkCard artwork={artwork} meta={meta} />);
     expect(screen.getByText('Белые ночи')).toBeTruthy();
     expect(screen.getByText('Анна Петрова')).toBeTruthy();
     expect(screen.getByText(/Масло, 60/)).toBeTruthy();
     expect(screen.getByLabelText('Премиум-художник')).toBeTruthy();
-    await fireEvent.press(screen.getByRole('button'));
+    await fireEvent.press(screen.getByLabelText(/^Белые ночи, Анна Петрова/));
     expect(router.push).toHaveBeenCalledWith({ pathname: '/artwork/[id]', params: { id: 'a1' } });
+  });
+
+  it('sends a guest to sign in when they tap the heart', async () => {
+    await wrap(<ArtworkCard artwork={artwork} meta={meta} />);
+    await fireEvent.press(screen.getByLabelText('В избранное'));
+    expect(router.push).toHaveBeenCalledWith('/login');
   });
 
   it('marks sold works', async () => {
