@@ -17,6 +17,7 @@ import { chooseAction, confirmAction, notify } from '@/lib/confirm';
 import { formatDate, formatPrice, formatSize, formatTimeLeft } from '@/lib/format';
 import { requireAuth, validId } from '@/lib/guard';
 import { ArtworkStrip, labelOf, previewAspect, statusLabel } from '@/ui/artwork';
+import { contentWidth, isWeb, useAppWidth, useContentWidth } from '@/ui/layout';
 import { Avatar, Button, Divider, ErrorState, IconButton, Loading, Notice, PremiumMark, SectionHeader, T } from '@/ui/primitives';
 import { fonts, makeStyles, radius, space, useColors } from '@/ui/theme';
 import { ImageViewer } from '@/ui/zoom';
@@ -40,7 +41,11 @@ function ArtworkView({ a }: { a: Artwork }) {
   const t = useT();
   const styles = useStyles();
   const colors = useColors();
-  const { width } = useWindowDimensions();
+  // в браузере карточка работы — колонка шириной contentWidth.page по центру
+  const width = useContentWidth(contentWidth.page);
+  // кнопки внизу — по ширине той же колонки
+  const barSide = (useAppWidth() - width) / 2 + space.lg;
+  const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { user } = useSession();
   const { data: meta } = useCatalogMeta();
@@ -60,7 +65,7 @@ function ArtworkView({ a }: { a: Artwork }) {
   const canBuy = !mine && ((a.status === 'published' && (!onVacation || hasLock)) || (a.status === 'reserved' && hasLock));
   const offersOn = useFeature('offers');
   const canOffer = canBuy && a.allow_offers && !hasLock && offersOn;
-  const frameHeight = Math.min(width / previewAspect(a), width * 1.25);
+  const frameHeight = Math.min(width / previewAspect(a), width * 1.25, isWeb ? windowHeight * 0.75 : Infinity);
   const rooms = a.rooms.map((r) => t(labelOf(meta, 'rooms', r))).filter(Boolean);
   const details = [
     [t('Категория'), t(labelOf(meta, 'categories', a.category))],
@@ -139,7 +144,7 @@ function ArtworkView({ a }: { a: Artwork }) {
           ),
         }}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 140 }}>
+      <ScrollView contentContainerStyle={[{ paddingBottom: insets.bottom + 140 }, isWeb && styles.page]}>
         <View style={[styles.frame, { height: frameHeight }]}>
           <FlatList
             data={a.images.length ? a.images : ['']}
@@ -280,7 +285,7 @@ function ArtworkView({ a }: { a: Artwork }) {
       </ScrollView>
 
       {!mine ? (
-        <View style={[styles.bar, { paddingBottom: insets.bottom + space.md }]}>
+        <View style={[styles.bar, { paddingBottom: insets.bottom + space.md, paddingHorizontal: barSide }]}>
           {canOffer ? (
             <Pressable accessibilityRole="button" onPress={() => requireAuth(!!user) && router.push({ pathname: '/offer/new/[artworkId]', params: { artworkId: a.id } })} style={styles.offerLink}>
               <T variant="bodyStrong" color={colors.bordeaux}>
@@ -365,6 +370,7 @@ function OwnerTools({ a, onArchive, archiving }: { a: Artwork; onArchive: () => 
 
 const useStyles = makeStyles((c) => ({
   root: { flex: 1, backgroundColor: c.wall },
+  page: { width: '100%', maxWidth: contentWidth.page, alignSelf: 'center' },
   headerActions: { flexDirection: 'row', gap: space.xs },
   frame: { backgroundColor: c.plaster },
   dots: { position: 'absolute', bottom: space.md, alignSelf: 'center', flexDirection: 'row', gap: 6 },

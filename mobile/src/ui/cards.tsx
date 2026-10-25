@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { memo, useState } from 'react';
-import { FlatList, Pressable, useWindowDimensions, View } from 'react-native';
+import { FlatList, Pressable, View } from 'react-native';
 
 import { del, errorText, post as apiPost } from '@/api/client';
 import { keys } from '@/api/hooks';
@@ -17,6 +17,7 @@ import { requireAuth } from '@/lib/guard';
 
 import { openArtwork } from './artwork';
 import { Avatar, PremiumMark, T } from './primitives';
+import { contentWidth, isWeb, useContentWidth } from './layout';
 import { makeStyles, radius, space, useColors } from './theme';
 
 export const PostCard = memo(function PostCard({ post }: { post: Post }) {
@@ -25,7 +26,7 @@ export const PostCard = memo(function PostCard({ post }: { post: Post }) {
   const colors = useColors();
   const qc = useQueryClient();
   const { user } = useSession();
-  const { width } = useWindowDimensions();
+  const width = useContentWidth(contentWidth.page);
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likes);
   // лента перечиталась (например, лайк с другого устройства) — берём свежие значения
@@ -146,7 +147,16 @@ export function ExhibitionCard({ e, width }: { e: Exhibition; width?: number }) 
 const useStyles = makeStyles((c) => ({
   flex: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  post: { paddingHorizontal: space.lg, paddingVertical: space.lg, gap: space.md, borderBottomWidth: 1, borderBottomColor: c.hairline, backgroundColor: c.wall },
+  post: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    gap: space.md,
+    borderBottomWidth: 1,
+    borderBottomColor: c.hairline,
+    backgroundColor: c.wall,
+    // в браузере пост — колонка для чтения по центру, картинки считаются от неё же
+    ...(isWeb ? { width: '100%' as const, maxWidth: contentWidth.page, alignSelf: 'center' as const } : null),
+  },
   postHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   postImage: { height: 300, borderRadius: radius.art, backgroundColor: c.plaster },
   linked: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.sm, borderRadius: radius.control, backgroundColor: c.paper, borderWidth: 1, borderColor: c.hairline },

@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, RefreshControl, useWindowDimensions, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 
 import { errorText } from '@/api/client';
 import { flatten, useExhibitions } from '@/api/hooks';
 import { useSession } from '@/auth/session';
 import { useT } from '@/i18n';
 import { ExhibitionCard } from '@/ui/cards';
+import { useAppWidth } from '@/ui/layout';
 import { Button, Chip, EmptyState, ErrorState, Loading } from '@/ui/primitives';
 import { makeStyles, space, useColors } from '@/ui/theme';
 
@@ -16,7 +17,7 @@ export default function ExhibitionsScreen() {
   const t = useT();
   const styles = useStyles();
   const colors = useColors();
-  const { width } = useWindowDimensions();
+  const width = useAppWidth();
   const { user } = useSession();
   const isArtist = user?.role === 'artist';
   const [scope, setScope] = useState<Scope>(useLocalSearchParams().mine === '1' && isArtist ? 'mine' : 'upcoming');

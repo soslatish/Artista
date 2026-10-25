@@ -3,11 +3,11 @@ import { GreatVibes_400Regular } from '@expo-google-fonts/great-vibes';
 import { Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ApiError, patch } from '@/api/client';
@@ -17,6 +17,7 @@ import { RealtimeBridge } from '@/features/realtime';
 import { WebHeaderLeft } from '@/features/web-header-left';
 import { deviceLocale, I18nProvider, type Locale, useLocale, useT } from '@/i18n';
 import { loadPref } from '@/lib/prefs';
+import { APP_MAX_WIDTH, isWeb } from '@/ui/layout';
 import { fonts, ThemeProvider, type ThemePref, useTheme } from '@/ui/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -158,9 +159,19 @@ function usePrefs(): { theme: ThemePref; locale: Locale } | null {
 
 function Root() {
   const { colors } = useTheme();
+  // в браузере приложение — колонка по центру экрана; админке нужна вся ширина
+  const path = usePathname();
+  const framed = isWeb && !path.startsWith('/admin');
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.wall }}>
-      <RootStack />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: framed ? colors.paper : colors.wall }}>
+      <View
+        style={
+          framed
+            ? { flex: 1, width: '100%', maxWidth: APP_MAX_WIDTH, alignSelf: 'center', backgroundColor: colors.wall, borderColor: colors.hairline, borderLeftWidth: 1, borderRightWidth: 1 }
+            : { flex: 1 }
+        }>
+        <RootStack />
+      </View>
     </GestureHandlerRootView>
   );
 }
