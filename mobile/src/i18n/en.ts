@@ -1083,4 +1083,7 @@ export const en: Record<string, string> = {
   "цена {p}": "price {p}",
   "ч": "h",
   "через {left}": "in {left}",
+  "Столовая": "Dining room",
+  "Примерить в интерьере": "Try in a room",
+  "Работа стоит на столе в настоящем масштабе. Перетащите, чтобы подвинуть.": "The work stands on the table at true scale. Drag it to move.",
 };

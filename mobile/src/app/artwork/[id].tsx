@@ -16,6 +16,7 @@ import { useT } from '@/i18n';
 import { chooseAction, confirmAction, notify } from '@/lib/confirm';
 import { formatDate, formatPrice, formatSize, formatTimeLeft } from '@/lib/format';
 import { requireAuth, validId } from '@/lib/guard';
+import { standsOnSurface } from '@/lib/try-on';
 import { ArtworkStrip, labelOf, previewAspect, statusLabel } from '@/ui/artwork';
 import { contentWidth, isWeb, useContentWidth } from '@/ui/layout';
 import { Avatar, Button, Divider, ErrorState, IconButton, Loading, Notice, PremiumMark, SectionHeader, T } from '@/ui/primitives';
@@ -175,7 +176,7 @@ function ArtworkView({ a }: { a: Artwork }) {
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/try-on/[id]', params: { id: a.id } })} style={styles.tryOn}>
               <Ionicons name="scan-outline" size={18} color="#FFFFFF" />
               <T variant="smallStrong" color="#FFFFFF">
-                {t('Примерить на стену')}
+                {standsOnSurface(a) ? t('Примерить в интерьере') : t('Примерить на стену')}
               </T>
             </Pressable>
           ) : null}
@@ -250,13 +251,18 @@ function ArtworkView({ a }: { a: Artwork }) {
               <T variant="body">{a.description}</T>
             </>
           ) : null}
-          <Divider />
-          <View style={styles.trust}>
-            <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
-            <T variant="small" style={styles.flex}>
-              {t('Оплата хранится у Artista, пока вы не подтвердите получение. После сделки вы получите сертификат подлинности.')}
-            </T>
-          </View>
+          {/* обещание про оплату через Artista — только когда включена безопасная сделка */}
+          {safeDeals ? (
+            <>
+              <Divider />
+              <View style={styles.trust}>
+                <Ionicons name="shield-checkmark-outline" size={22} color={colors.success} />
+                <T variant="small" style={styles.flex}>
+                  {t('Оплата хранится у Artista, пока вы не подтвердите получение. После сделки вы получите сертификат подлинности.')}
+                </T>
+              </View>
+            </>
+          ) : null}
           {error ? <Notice tone="danger" text={error} /> : null}
 
           {mine ? <OwnerTools a={a} onArchive={confirmArchive} archiving={archive.isPending} /> : null}

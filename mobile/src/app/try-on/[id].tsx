@@ -1,6 +1,7 @@
 // «Примерить на стену»: работа в настоящем масштабе на фоне готового интерьера или фото своей стены.
-// Масштаб: у готовых интерьеров он известен (диван 200 см и т. п.), для своего фото пользователь
-// отмечает предмет известной ширины — дверь, лист А4.
+// Масштаб: у готовых интерьеров он известен (нарисованы 3.2 px = 1 см, см. scripts/rooms), для своего фото
+// пользователь отмечает предмет известной ширины — дверь, лист А4. Картины висят на стене,
+// скульптура стоит на столе или консоли.
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { Image } from 'expo-image';
@@ -17,6 +18,7 @@ import { useT } from '@/i18n';
 import { notify } from '@/lib/confirm';
 import { parseRubles } from '@/lib/format';
 import { validId } from '@/lib/guard';
+import { standsOnSurface } from '@/lib/try-on';
 import { Button, Chip, ErrorState, Field, Loading, T } from '@/ui/primitives';
 import { makeStyles, radius, space } from '@/ui/theme';
 
@@ -28,14 +30,25 @@ interface Room {
   height: number;
   pxPerCm: number; // в пикселях исходного изображения
   floorY: number; // линия пола в пикселях исходного изображения
+  wallX: number; // где по умолчанию висит картина
+  surface: { x: number; y: number }; // где стоит скульптура: центр и верх поверхности
+  top: string; // цвет верха стены — им заливается экран над картинкой на узком телефоне
 }
 
-// масштаб интерьеров задан при отрисовке (см. assets/rooms)
+// геометрия совпадает со сценами в scripts/rooms/scenes.mjs (render.mjs печатает её)
+const scene = { width: 1800, height: 1100, pxPerCm: 3.2, floorY: 860, wallX: 900 };
 const rooms: Room[] = [
-  { key: 'living', label: 'Гостиная', source: require('@/assets/rooms/living.jpg'), width: 1600, height: 1100, pxPerCm: 3.2, floorY: 860 },
-  { key: 'bedroom', label: 'Спальня', source: require('@/assets/rooms/bedroom.jpg'), width: 1600, height: 1100, pxPerCm: 3.2, floorY: 860 },
-  { key: 'office', label: 'Кабинет', source: require('@/assets/rooms/office.jpg'), width: 1600, height: 1100, pxPerCm: 3.2, floorY: 860 },
+  { key: 'living', label: 'Гостиная', source: require('@/assets/rooms/living.jpg'), ...scene, surface: { x: 900, y: 935 }, top: '#F7EBDA' },
+  { key: 'bedroom', label: 'Спальня', source: require('@/assets/rooms/bedroom.jpg'), ...scene, surface: { x: 840, y: 955 }, top: '#E8EDE1' },
+  { key: 'office', label: 'Кабинет', source: require('@/assets/rooms/office.jpg'), ...scene, surface: { x: 880, y: 620 }, top: '#F0ECE6' },
+  { key: 'dining', label: 'Столовая', source: require('@/assets/rooms/dining.jpg'), ...scene, surface: { x: 900, y: 735 }, top: '#F6E6D9' },
+  { key: 'hallway', label: 'Прихожая', source: require('@/assets/rooms/hallway.jpg'), ...scene, surface: { x: 900, y: 604 }, top: '#EAEEEF' },
 ];
+
+/** Сколько пикселей сцены по ширине должно быть видно: на узком экране — вся комната, а не кусок дивана. */
+const MIN_VISIBLE_SCENE_WIDTH = 900;
+/** Сколько пикселей пустой стены сверху можно срезать, прежде чем резать пол. */
+const SCENE_CROP_TOP = 150;
 
 /** Центр работы по стандарту галерей — на высоте 150 см от пола. */
 const EYE_LEVEL_CM = 150;
@@ -72,15 +85,20 @@ function TryOn({ id }: { id: string }) {
 
   const room = rooms.find((r) => r.key === roomKey) ?? rooms[0];
 
-  // прямоугольник фона на экране (contentFit="contain")
+  // прямоугольник фона на экране: интерьер заполняет экран (cover), своё фото видно целиком (contain) —
+  // по нему отмечают масштаб
   const bg = useMemo(() => {
     const iw = photo ? photo.width : room.width;
     const ih = photo ? photo.height : room.height;
     if (!stage.w || !stage.h || !iw || !ih) return null;
-    const scale = Math.min(stage.w / iw, stage.h / ih);
+    const scale = photo ? Math.min(stage.w / iw, stage.h / ih) : Math.min(Math.max(stage.w / iw, stage.h / ih), stage.w / MIN_VISIBLE_SCENE_WIDTH);
     const w = iw * scale;
     const h = ih * scale;
-    return { x: (stage.w - w) / 2, y: (stage.h - h) / 2, w, h, scale };
+    if (photo) return { x: (stage.w - w) / 2, y: (stage.h - h) / 2, w, h, scale };
+    // низкий интерьер — пол у нижнего края экрана, сверху продолжение стены;
+    // высокий — обрезаем сначала потолок (до SCENE_CROP_TOP), потом пол
+    const y = h <= stage.h ? stage.h - h : Math.max(stage.h - h, -SCENE_CROP_TOP * scale);
+    return { x: (stage.w - w) / 2, y, w, h, scale };
   }, [photo, room, stage]);
 
   if (q.isLoading) return <Loading />;
@@ -90,7 +108,13 @@ function TryOn({ id }: { id: string }) {
   const pxPerCm = photo ? photoPxPerCm : bg ? room.pxPerCm * bg.scale : null;
   const artW = pxPerCm ? a.width_cm * pxPerCm : 0;
   const artH = pxPerCm ? a.height_cm * pxPerCm : 0;
-  const defaultCenter = bg && pxPerCm ? (photo ? { x: bg.x + bg.w / 2, y: bg.y + bg.h * 0.4 } : { x: bg.x + bg.w / 2, y: bg.y + room.floorY * bg.scale - EYE_LEVEL_CM * pxPerCm }) : null;
+  const standing = standsOnSurface(a);
+  const defaultCenter = (() => {
+    if (!bg || !pxPerCm) return null;
+    if (photo) return { x: bg.x + bg.w / 2, y: bg.y + bg.h * (standing ? 0.6 : 0.4) };
+    if (standing) return { x: bg.x + room.surface.x * bg.scale, y: bg.y + room.surface.y * bg.scale - artH / 2 };
+    return { x: bg.x + room.wallX * bg.scale, y: bg.y + room.floorY * bg.scale - EYE_LEVEL_CM * pxPerCm };
+  })();
 
   const pickWall = async (source: 'library' | 'camera') => {
     const [asset] = await pickPhotos(source, 1);
@@ -113,8 +137,12 @@ function TryOn({ id }: { id: string }) {
 
   return (
     <View style={styles.root}>
-      <View ref={shotRef} collapsable={false} style={styles.stage} onLayout={onLayout}>
-        <Image source={photo ? { uri: photo.uri } : room.source} style={styles.fill} contentFit="contain" />
+      <View ref={shotRef} collapsable={false} style={[styles.stage, !photo && { backgroundColor: room.top }]} onLayout={onLayout}>
+        {photo ? (
+          <Image source={{ uri: photo.uri }} style={styles.fill} contentFit="contain" />
+        ) : bg ? (
+          <Image source={room.source} style={{ position: 'absolute', left: bg.x, top: bg.y, width: bg.w, height: bg.h }} contentFit="fill" />
+        ) : null}
         {calibrating && photo ? (
           <Calibrator onDone={(ppc) => (setPhotoPxPerCm(ppc), setCalibrating(false))} stageWidth={stage.w} />
         ) : defaultCenter && artW > 0 && a.images[0] ? (
@@ -147,7 +175,11 @@ function TryOn({ id }: { id: string }) {
         {!calibrating ? (
           <>
             <T variant="small" center>
-              {photo ? t('Перетащите работу, чтобы выбрать место.') : t('Работа висит центром на высоте 150 см — как в галерее. Перетащите, чтобы подвинуть.')}
+              {photo
+                ? t('Перетащите работу, чтобы выбрать место.')
+                : standing
+                  ? t('Работа стоит на столе в настоящем масштабе. Перетащите, чтобы подвинуть.')
+                  : t('Работа висит центром на высоте 150 см — как в галерее. Перетащите, чтобы подвинуть.')}
             </T>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               {rooms.map((r) => (
